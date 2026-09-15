@@ -25,16 +25,18 @@
 |---|---|
 | 파이프라인 5단계 | ✅ 전 구간 정상 동작. 실행 1회 ~10초 (831건 수집 → 8건 선별 → 6건 발행) |
 | CLI (`run.py`) | ✅ 동작 (`--check`, `--stage`, `--schedule` 지원) |
-| GUI (`app.py` + `web/`) | ✅ 동작. http://127.0.0.1:8765 (소스 2분할 탭, 선수-심판 분리 팁, 스케줄러) |
+| GUI (`app.py` + `web/`) | ✅ 동작. http://127.0.0.1:8765 (소스 2분할 탭, 선수-심판 분리 팁, 스케줄러, 저작권 푸터) |
 | 테스트 | ✅ 70개 전부 통과 |
 | 수집 소스 | ✅ 총 35개 (본문 뉴스 소스 24개[활성 22], 증인 전용 소스 11개) |
 | LLM | OpenAI `gpt-4.1-mini` 사용 중 (키 설정됨) |
 | 발행 | 디스코드 웹후크 설정됨. **`dry_run: true`라 아직 실제 전송 안 함** |
 | 교차검증 검색 | ⚠️ 네이버 키가 없어 `google_news` 폴백 중 (아래 4-1 참고) |
-| 라이선스 | ✅ `LICENSE` 파일 완비 (`cjwmanelf` 독점 저작권, 무단 수정/포크 금지) |
+| 라이선스 & 저작권 | ✅ `LICENSE` 및 웹 UI 하단 `Copyright (c) 2026 cjwmanelf. All rights reserved.` 완비 |
+| 깃허브 배포 & 포크 지원 | ✅ `origin/main` (`github.com/cjwmanelf/news-agent`) 최신화 완료. Zero-Config 퀵스타트 가이드 완비 |
 
 **설정된 키**: `OPENAI_API_KEY`, `DISCORD_WEBHOOK_URL`, `FINNHUB_TOKEN`
 **현재 설정**: `lookback 24h` / `threshold 0.4` / `max_articles 8` / 본문 소스 22개 활성 / 증인 소스 11개 활성
+**원격 저장소**: `git@github.com:cjwmanelf/news-agent.git` (브랜치: `main`)
 
 
 ### 실행 방법
@@ -210,12 +212,19 @@
 ```
 run.py                      CLI 엔트리포인트
 app.py                      로컬 GUI 서버 (Flask, 127.0.0.1 전용)
-web/                        GUI 프런트엔드 (index.html · style.css · app.js, 프레임워크 없음)
-LICENSE                     독점 저작권 및 이용 약관 (cjwmanelf, All Rights Reserved - No Derivatives)
-README.md                   사용자 가이드 및 아키텍처 요약
+web/                        GUI 프런트엔드 (index.html · style.css · app.js, 저작권 푸터 포함)
+LICENSE                     독점 저작권 및 이용 약관 (cjwmanelf, All Rights Reserved)
+README.md                   사용자 가이드, 아키텍처, 포크(Fork)·클론 사용자용 퀵스타트
 PRD.md                      제품 요구사항 정의서 (설계 결정 및 실측 데이터)
-REPORT.md                   최종 종합 보고서 (독자 정의, 실측 지표, 5대 화면 증명, 회고)
+REPORT.md                   최종 종합 보고서 (제출물 6종 매핑, 실측 지표, 5대 화면 캡처)
 HANDOFF.md                  인수인계 문서 (현재 파일)
+
+docs/screenshots/           REPORT.md에 임베드된 5대 핵심 실측 화면 캡처
+  01_dashboard_execution.png  전 구간 정상 실행 및 대시보드 요약/검증 카드
+  02_verification_card.png    단독 보도(SINGLE_SOURCE) vs 교차검증 상세 모달
+  03_scheduler_modal.png      주기적 자동 수집·발행 스케줄러 설정 모달
+  04_settings_api.png         보안 강화된 API 키·웹후크 입력 UI (마스킹)
+  05_settings_sources.png     본문 vs 증인 소스 2분할 관리 UI
 
 src/newsagent/
   graph.py                  LangGraph 조립 (체크포인터·재시도·발행 승인 인터럽트)
@@ -237,13 +246,23 @@ src/newsagent/
 config/                     config.yaml · sources.yaml · interests.yaml (GUI가 주석 보존하며 편집)
 state/                      published.db · checkpoints.db (자동 생성, 지워도 무방)
 output/                     <run_id>.md · <run_id>.json (실행 기록 다수)
-tests/test_pipeline.py      70개
+tests/test_pipeline.py      70개 (전수 통과)
 
 ```
 
 ---
 
-## 6. 작업할 때 주의할 것
+## 6. 포크(Fork) 및 클론 시 유의사항
+
+1. **Zero-Config 기본값 보장**:
+   - `config/config.yaml` 기본 설정이 `llm.provider: mock`, `publish.dry_run: true`로 되어 있어, 포크받은 제3자가 **API 키나 웹후크가 전혀 없는 상태에서도 에러 없이 전 구간을 실행**할 수 있다.
+2. **비밀값 보존**:
+   - `.env` 및 `.venv`는 `.gitignore`로 관리되므로 깃허브 저장소에 비밀값이 누출되지 않는다.
+   - 키 입력은 GUI의 `설정` > `API 키 · 웹후크` 또는 `.env.example`을 복사한 `.env`를 통해 이루어진다.
+
+---
+
+## 7. 작업할 때 주의할 것
 
 - **GUI 설정 저장은 ruamel 라운드트립**이라 yaml 주석이 보존된다. `yaml.safe_dump`로 바꾸면 주석이 전부 날아간다.
 - **소스 목록을 GUI에 보낼 때는 원본 yaml을 읽는다** (`read_yaml`). `load_config`는 `${NEWSAPI_KEY}`를
@@ -258,7 +277,7 @@ tests/test_pipeline.py      70개
 
 ---
 
-## 7. 바로 이어서 할 만한 일 (우선순위)
+## 8. 바로 이어서 할 만한 일 (우선순위)
 
 1. **네이버 API HUB 키 발급 → 응답 형식 확인** (4-1). 이게 4단계 품질의 병목이다.
 2. **`dry_run: false`로 실제 디스코드 전송 검증** (4-2). 500 재시도가 실전에서 먹히는지.
