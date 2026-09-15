@@ -1,0 +1,107 @@
+# 뉴스레터 에이전트 실행 설정
+
+llm:
+  # anthropic | openai | gemini | local | mock
+  #   local = Ollama·LM Studio·vLLM 등 OpenAI 호환 로컬 서버 (아래 base_url 참고)
+  #   mock  = API 키 없이 파이프라인 전 구간을 돌려보는 테스트용 백엔드
+  provider: openai
+  model:
+    anthropic: claude-sonnet-5
+    openai: gpt-4.1-mini
+    gemini: gemini-2.5-flash
+    local: llama3.1
+  temperature: 0.2
+  max_tokens: 2000
+
+  # OpenAI 호환 엔드포인트 주소 (provider: local 일 때만 사용)
+  # Ollama    http://localhost:11434/v1
+  # LM Studio http://localhost:1234/v1
+  # vLLM      http://localhost:8000/v1
+  base_url:
+    local: http://localhost:11434/v1
+collect:
+  lookback_hours: 21        # 이 시간 안에 발행된 기사만 후보로 (R1-4)
+  max_workers: 8            # 소스 병렬 수집 스레드 수
+  timeout: 15               # 소스당 타임아웃(초)
+  default_max_items: 50     # 소스별 기본 상한
+  respect_robots: true      # crawl 타입에 robots.txt 적용 (R1-6)
+  user_agent: "newsagent/1.0 (+personal newsletter bot)"
+
+research:
+  max_workers: 4            # 기사 요약 동시 처리 수
+  max_content_chars: 12000  # LLM 에 넣을 본문 상한 (R3-3)
+  fetch_full_text: true     # false 면 피드 스니펫만으로 요약
+
+verify:
+  # 같은 사건으로 묶는 임계값. 실측 기준: 같은 사건 기사쌍 0.54~0.81,
+  # '같은 기업이 나오지만 다른 사건'인 기사쌍 0.20 이하. 그 사이인 0.35 를 둔다.
+  cluster_threshold: 0.17
+  max_cluster_peers: 6      # LLM 에 넘길 대조 기사 최대 수
+
+  # 증인 기사와 대상 기사의 시간 간격 상한(시간). 보도가 적은 사건일수록 검색이
+  # 오래된 유사 기사를 끌어오는데, 그게 '독립 출처'로 잡히면 교차검증이 조용히 오염된다.
+  # 0 으로 두면 시효 검사를 하지 않는다.
+  peer_max_age_hours: 96
+
+  # 증인 기사의 원문을 실제로 읽어온다. 끄면 LLM 이 제목만 보고 팩트체크하게 되고,
+  # key_facts 의 수치는 영원히 unverified 로 남는다.
+  fetch_peer_content: true
+  max_peer_fetch: 4         # 본문을 가져올 증인 수 (상위 N건)
+  peer_body_chars: 1500     # 증인 본문을 LLM 에 넣을 때의 길이 상한
+
+  # 사건별 뉴스 검색으로 증인을 직접 찾는다. 끄면 1단계에서 모은 기사만 대조군이 되는데,
+  # 실측상 그 경우 증인이 거의 항상 0건이라 검수가 사실상 동작하지 않는다.
+  corroboration_search:
+    enabled: true
+    # auto         = 있는 키에 맞춰 알아서 고른다 (hub > legacy > google_news)
+    # naver_hub    = 네이버 검색 API (신규). originallink(원문 URL)와 본문 발췌를 줘서
+    #                검증 품질이 가장 좋다. 발급: 네이버클라우드 플랫폼 > NAVER API HUB
+    # naver_legacy = 개발자센터에서 예전에 받은 Client ID/Secret. 2027-06-30 까지만 지원.
+    # google_news  = 키가 필요 없지만 링크가 암호화 리다이렉트라 본문을 못 가져온다.
+    provider: auto
+    max_results: 20
+    hl: ko
+    gl: KR
+    ceid: "KR:ko"
+  min_confidence_to_publish: 0.0   # 이 미만은 발행 제외 (0.0 = 전부 발행)
+  duplicate_threshold: 0.9  # 이 이상 유사하면 동일 원본 전재로 보고 독립 출처에서 제외
+
+publish:
+  dry_run: true             # true = 실제 전송 없이 콘솔/파일 출력만 (R5-3)
+  username: "종우's AI관련 인프라 & 반도체 소식"
+  title: "오늘의 뉴스 브리핑"
+  max_embeds_per_message: 10
+  send_interval: 1.0        # 연속 전송 사이 최소 간격(초)
+  include_verdicts: [VERIFIED, LIKELY, SINGLE_SOURCE, DISPUTED]
+  # 발행 채널. 여러 개를 함께 적으면 동시에 보냅니다.
+  # 사용 가능: discord, slack, telegram
+  # 채널마다 필요한 값은 설정 화면의 'API 키·웹후크' 에서 넣으세요.
+  targets: [discord]
+
+output:
+  dir: output
+  save_json: true
+  save_markdown: true
+
+# 발행 이력 — 같은 소식이 며칠 연속 나가는 것을 막는다.
+# 기사 ID 로 한 번, 4단계에서 사건 유사도로 한 번 더 거른다.
+history:
+  enabled: true
+  path: state/published.db
+  lookback_days: 7          # 이 기간 안에 발행한 기사·사건은 다시 내보내지 않는다
+  keep_days: 90             # 이보다 오래된 이력은 정리한다
+  record_on_dry_run: false  # dry_run 이 이력을 남기면 진짜 발행 때 빈 뉴스레터가 나간다
+
+runtime:
+  # 체크포인터를 켜면 실행 상태가 디스크에 남아, 발행만 실패했을 때
+  # 수집·요약을 다시 돌리지 않고 이어서 재개할 수 있다 (run.py --resume).
+  checkpoint: true
+  checkpoint_path: state/checkpoints.db
+
+# 자동 실행 스케줄러 — 정해진 주기에 맞춰 파이프라인을 자동 실행합니다.
+schedule:
+  enabled: false          # true 면 자동 실행 활성화
+  mode: interval          # interval(매 N시간마다) | daily(매일 정해진 시각)
+  interval_hours: 6       # interval 모드: 실행 간격(시간)
+  daily_time: "08:30"     # daily 모드: 매일 실행 시각 (HH:MM)
+

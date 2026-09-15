@@ -1,0 +1,173 @@
+# 1단계 수집 소스
+#
+# type: rss   → RSS 2.0 / Atom 1.0 (feedparser 가 둘 다 처리)
+# type: api   → 범용 JSON API (items_path 로 배열 위치, field_map 으로 필드 매핑)
+# type: crawl → 목록 페이지 HTML 크롤링 (CSS 셀렉터)
+#
+# role: content       → 선별·요약 대상이자 교차검증 증인 (기본값)
+#       corroboration → 교차검증 증인으로만 사용, 뉴스레터에 직접 실리지는 않음
+#
+#   구글뉴스 같은 애그리게이터는 반드시 corroboration 으로 둡니다.
+#   링크가 news.google.com 암호화 리다이렉트라 원문 본문을 가져올 수 없어
+#   3단계 요약이 제목 재탕이 되기 때문입니다. 대신 한 사건을 다룬 매체를
+#   폭넓게 끌어오므로 4단계 교차검증의 증인으로는 가장 값집니다.
+#
+# 공통 옵션: name, enabled, max_items, lookback_hours(미지정 시 config.yaml 전역값 사용)
+
+sources:
+  # ------------------------------------------------- 본문 소스 (content)
+- name: AI타임스
+  type: rss
+  enabled: true
+  url: "https://www.aitimes.com/rss/allArticle.xml"
+  max_items: 40
+
+  role: content
+- name: ZDNet Korea
+  type: rss
+  enabled: true
+  url: "https://feeds.feedburner.com/zdkorea"
+  max_items: 30
+
+  role: content
+- name: 전자신문
+  type: rss
+  enabled: true
+  url: "https://rss.etnews.com/Section901.xml"
+  max_items: 30
+
+  role: content
+- name: 블로터
+  type: rss
+  enabled: true
+  url: "https://www.bloter.net/rss/allArticle.xml"
+  max_items: 40
+
+  role: content
+- name: 아이뉴스24 IT
+  type: rss
+  enabled: true
+  url: "https://www.inews24.com/rss/news_it.xml"
+  max_items: 40
+
+  role: content
+- name: 한국경제 IT
+  type: rss
+  enabled: true
+  url: "https://www.hankyung.com/feed/it"
+  max_items: 30
+
+  role: content
+- name: TechCrunch
+  type: rss
+  enabled: true
+  url: "https://techcrunch.com/feed/"
+  max_items: 30
+
+  role: content
+- name: Ars Technica
+  type: rss
+  enabled: true
+  url: https://feeds.arstechnica.com/arstechnica/index
+  role: content
+  max_items: 30
+- name: 디일렉 (The Elec)
+  type: rss
+  enabled: true
+  url: "http://www.thelec.kr/rss/allArticle.xml"
+  role: content
+  max_items: 30
+- name: ServeTheHome
+  type: rss
+  enabled: true
+  url: "https://www.servethehome.com/feed/"
+  role: content
+  max_items: 30
+  lookback_hours: 72
+- name: 구글뉴스 - AI
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=AI+%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 반도체
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%EB%B0%98%EB%8F%84%EC%B2%B4&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+  # ---------------------------------------------------------------- API
+  # 키 없이 쓰는 공개 JSON API 예시 (Hacker News / Algolia)
+- name: Hacker News (API)
+  type: api
+  enabled: true
+  url: "https://hn.algolia.com/api/v1/search_by_date"
+  params:
+    hitsPerPage: 30
+    tags: story
+  items_path: hits            # 응답 JSON 에서 기사 배열의 위치 (점 표기 지원: data.articles)
+  field_map:                  # Article 필드 ← 응답 필드
+    title: title
+    url: url
+    snippet: story_text
+    published_at: created_at
+  max_items: 30
+
+  # NewsAPI 예시 — 키가 있으면 enabled: true 로 바꾸고 .env 에 NEWSAPI_KEY 를 넣으세요.
+  role: content
+- name: NewsAPI
+  type: api
+  enabled: true
+  url: "https://newsapi.org/v2/top-headlines"
+  params:
+    country: kr
+    pageSize: 50
+  headers:
+    X-Api-Key: ${NEWSAPI_KEY}
+  items_path: articles
+  field_map:
+    title: title
+    url: url
+    snippet: description
+    published_at: publishedAt
+    source: source.name
+  max_items: 50
+
+  # -------------------------------------------------------------- CRAWL
+  role: content
+- name: Hacker News (크롤링)
+  type: crawl
+  enabled: true
+  url: "https://news.ycombinator.com/"
+  list_selector: "span.titleline > a"     # 기사 링크 요소
+  link_attr: href
+  base_url: "https://news.ycombinator.com/"
+  max_items: 20
+  role: content
+- name: 엔비디아
+  type: rss
+  enabled: true
+  url: https://nvidianews.nvidia.com/rss.xml
+  role: content
+  max_items: 30
+  lookback_hours: 168
+- name: finnhub
+  type: api
+  enabled: true
+  url: https://finnhub.io/api/v1/company-news
+  role: content
+  max_items: 30
+  items_path: ''
+  field_map:
+    title: headline
+    url: url
+    snippet: summary
+    published_at: datetime
+    source: source
+  params:
+    from: '{days_ago:7}'
+    symbol: NVDA
+    to: '{today}'
+    token: ${FINNHUB_TOKEN}

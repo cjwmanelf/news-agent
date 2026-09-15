@@ -1,0 +1,49 @@
+# 2단계 선별 설정
+#
+# mode      : keyword | vector | hybrid
+#   keyword = 키워드 매칭 점수만 사용
+#   vector  = 관심사 프로필과 기사의 TF-IDF 코사인 유사도만 사용
+#   hybrid  = 두 점수를 weights 비율로 합산 (권장)
+# threshold : 이 점수 이상만 통과
+# max_articles : 통과분 중 상위 N건만 3단계로 넘김
+
+mode: hybrid
+threshold: 0.21
+max_articles: 8
+
+weights:
+  keyword: 0.6
+  vector: 0.4
+
+interests:
+- name: AI 인프라·반도체
+  weight: 0.9
+  keywords:
+  - GPU
+  - NPU
+  - HBM
+  - 반도체
+  - 데이터센터
+  - 파운드리
+  - 엔비디아
+  - 삼성전자
+  - SK하이닉스
+  - TSMC
+  - 추론 칩
+  exclude:
+  - 주가 전망
+  - 매수 추천
+- name: 엔비디아
+  weight: 1.2
+  keywords:
+  - DGX
+  - RTX
+  - 블랙웰
+  - NVLINK
+  - 베라루빈
+  - NVDA
+  - 엔비디아
+  - 데이터 센터
+  - 젠슨 황
+  - 리사 수
+  exclude: []

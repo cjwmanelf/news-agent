@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>뉴스레터 에이전트</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">📰</span>
+    <h1>뉴스레터 에이전트</h1>
+  </div>
+  <div class="topbar-right">
+    <span id="schedPill" class="pill pill-idle" title="자동 실행 상태">⏰ 스케줄 꺼짐</span>
+    <div id="envDots" class="env-dots"></div>
+    <span id="statusPill" class="pill pill-idle">대기</span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab is-active" data-tab="run" role="tab">실행</button>
+  <button class="tab" data-tab="settings" role="tab">설정</button>
+  <button class="tab" data-tab="history" role="tab">이력</button>
+</nav>
+
+<main>
+
+  <!-- ─────────────────────────────────── 실행 -->
+  <section id="panel-run" class="panel is-active">
+
+    <div class="control-card">
+      <div class="control-main">
+        <button id="runBtn" class="btn btn-primary btn-lg">
+          <span class="btn-icon">▶</span><span id="runBtnText">실행</span>
+        </button>
+        </div>
+
+      <div class="control-opts">
+        <label class="field">
+          <span class="field-label">어디까지</span>
+          <select id="optStage">
+            <option value="publish">전체 (발행까지)</option>
+            <option value="collect">1. 수집까지</option>
+            <option value="curate">2. 선별까지</option>
+            <option value="research">3. 취재까지</option>
+            <option value="verify">4. 검수까지</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">LLM</span>
+          <select id="optProvider">
+            <option value="">설정 그대로</option>
+            <option value="mock">mock (키 불필요)</option>
+            <option value="anthropic">Claude</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+            <option value="local">로컬 LLM</option>
+          </select>
+        </label>
+
+        <label class="field field-narrow">
+          <span class="field-label">기사 수</span>
+          <input id="optMaxArticles" type="number" min="1" max="30" placeholder="기본">
+        </label>
+
+        <label class="switch">
+          <input id="optDryRun" type="checkbox" checked>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">연습 실행 <small>(실제로 보내지 않음)</small></span>
+        </label>
+
+        <label class="switch">
+          <input id="optApprove" type="checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">발행 전 확인 <small>(결과 보고 결정)</small></span>
+        </label>
+      </div>
+
+      <p id="runHint" class="hint"></p>
+    </div>
+
+    <ol id="stepper" class="stepper" aria-label="진행 단계"></ol>
+
+    <div id="approvalBar" class="approval" hidden>
+      <div class="approval-text">
+        <strong>발행 대기</strong>
+        <span id="approvalCount"></span>
+      </div>
+      <div class="approval-actions">
+        <button id="discardBtn" class="btn btn-ghost">취소</button>
+        <button id="approveBtn" class="btn btn-send">지금 발행</button>
+      </div>
+    </div>
+
+    <div id="statsRow" class="stats-row" hidden></div>
+
+    <div id="errorBox" class="errbox" hidden></div>
+
+    <div class="split">
+      <div class="results-col">
+        <div class="col-head">
+          <h2>결과</h2>
+          <span id="resultCount" class="muted"></span>
+        </div>
+        <div id="results" class="results"></div>
+        <p id="resultsEmpty" class="empty">아직 실행하지 않았습니다. 위의 <strong>실행</strong>을 누르세요.</p>
+      </div>
+
+      <div class="log-col">
+        <div class="col-head">
+          <h2>로그</h2>
+          <button id="clearLog" class="btn btn-tiny">지우기</button>
+        </div>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────── 설정 -->
+  <section id="panel-settings" class="panel">
+    <div class="settings-head">
+      <p class="muted">저장하면 <code>config/*.yaml</code> 에 바로 반영됩니다. 파일의 주석은 그대로 유지됩니다.</p>
+      <div class="settings-actions">
+        <span id="saveNote" class="save-note"></span>
+        <button id="saveBtn" class="btn btn-primary">저장</button>
+      </div>
+    </div>
+
+    <div id="cfgWarnings" class="warnbox" hidden></div>
+
+    <div class="settings-grid">
+      <div class="card">
+        <h3>선별 기준</h3>
+        <label class="field">
+          <span class="field-label">방식</span>
+          <select id="cfgMode">
+            <option value="hybrid">hybrid (키워드+벡터)</option>
+            <option value="keyword">keyword</option>
+            <option value="vector">vector</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">통과 임계값 <output id="cfgThresholdOut"></output></span>
+          <input id="cfgThreshold" type="range" min="0" max="1" step="0.01">
+          <small class="help">높일수록 적게 뽑힙니다. 기사가 너무 적거나 많으면 여기부터 조정하세요.</small>
+        </label>
+        <label class="field field-narrow">
+          <span class="field-label">최대 기사 수</span>
+          <input id="cfgMaxArticles" type="number" min="1" max="30">
+        </label>
+        <label class="field field-narrow">
+          <span class="field-label">수집 범위 (시간)</span>
+          <input id="cfgLookback" type="number" min="1" max="168">
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>검수</h3>
+        <label class="field">
+          <span class="field-label">같은 사건 판정 임계값 <output id="cfgClusterOut"></output></span>
+          <input id="cfgCluster" type="range" min="0.1" max="0.9" step="0.01">
+          <small class="help">낮추면 증인이 늘지만 무관한 기사가 섞여 <strong>허위 교차검증</strong>이 생깁니다.</small>
+        </label>
+        <label class="field field-narrow">
+          <span class="field-label">증인 시효 (시간)</span>
+          <input id="cfgPeerAge" type="number" min="0" max="720">
+        </label>
+        <label class="field">
+          <span class="field-label">증인 검색 백엔드</span>
+          <select id="cfgSearchProvider">
+            <option value="auto">auto — 있는 키에 맞춰 자동</option>
+            <option value="naver_hub">네이버 검색 (API HUB · 신규)</option>
+            <option value="naver_legacy">네이버 검색 (개발자센터 · 구 방식)</option>
+            <option value="google_news">구글뉴스 — 키 불필요</option>
+          </select>
+          <small id="searchHelp" class="help"></small>
+        </label>
+        <label class="switch">
+          <input id="cfgFetchPeer" type="checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">증인 본문 읽어오기</span>
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>LLM</h3>
+        <label class="field">
+          <span class="field-label">백엔드</span>
+          <select id="cfgProvider">
+            <option value="mock">mock — 키 불필요, 요약 품질 낮음</option>
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini (Google)</option>
+            <option value="local">로컬 LLM (Ollama·LM Studio 등)</option>
+          </select>
+          <small id="providerHelp" class="help"></small>
+        </label>
+        <label class="field">
+          <span class="field-label">모델 이름</span>
+          <input id="cfgModel" type="text" placeholder="예: claude-sonnet-5">
+        </label>
+        <label class="field" id="baseUrlField" hidden>
+          <span class="field-label">서버 주소 (base URL)</span>
+          <input id="cfgBaseUrl" type="text" placeholder="http://localhost:11434/v1">
+          <small class="help">Ollama <code>:11434/v1</code> · LM Studio <code>:1234/v1</code> · vLLM <code>:8000/v1</code></small>
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>발행</h3>
+        <div class="field">
+          <span class="field-label">보낼 채널 <small class="muted">(여러 개 선택 가능)</small></span>
+          <div id="channelList" class="channels"></div>
+        </div>
+        <label class="field">
+          <span class="field-label">뉴스레터 제목</span>
+          <input id="cfgTitle" type="text">
+        </label>
+        <label class="field">
+          <span class="field-label">봇 이름</span>
+          <input id="cfgUsername" type="text">
+        </label>
+        <label class="switch">
+          <input id="cfgDryRun" type="checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">기본값을 연습 실행으로</span>
+        </label>
+        <label class="switch">
+          <input id="cfgHistory" type="checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">중복 발행 방지 사용</span>
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>자동 실행 스케줄</h3>
+        <label class="switch">
+          <input id="cfgSchedEnabled" type="checkbox">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">주기적 자동 실행 켜기</span>
+        </label>
+        <label class="field">
+          <span class="field-label">실행 방식</span>
+          <select id="cfgSchedMode">
+            <option value="interval">매 N시간마다 (간격 실행)</option>
+            <option value="daily">매일 정해진 시각 (하루 1회)</option>
+          </select>
+        </label>
+        <div id="schedIntervalBox">
+          <label class="field field-narrow">
+            <span class="field-label">실행 간격 (시간)</span>
+            <input id="cfgSchedInterval" type="number" min="1" max="72" value="6">
+            <small class="help">예: 6 = 6시간마다 1회 자동 실행</small>
+          </label>
+        </div>
+        <div id="schedDailyBox" hidden>
+          <label class="field field-narrow">
+            <span class="field-label">실행 시각</span>
+            <input id="cfgSchedDailyTime" type="time" value="08:30">
+            <small class="help">매일 이 시각에 자동으로 실행합니다.</small>
+          </label>
+        </div>
+        <div id="schedStatusHelp" class="help"></div>
+      </div>
+    </div>
+
+    <details class="card secret-card">
+      <summary class="secret-summary">
+        <div class="secret-summary-title">
+          <h3>🔑 API 키 · 웹후크</h3>
+          <span class="muted small secret-summary-badge">평소에는 숨김 · 클릭하여 펼치기</span>
+        </div>
+        <span class="secret-summary-arrow">▶</span>
+      </summary>
+      <div class="secret-content">
+        <div class="settings-head" style="margin:0 0 14px 0">
+          <div>
+            <p class="muted small">
+              <code>.env</code> 파일에 저장되며 브라우저로 다시 내려보내지 않습니다.
+              값을 비워두면 기존 값이 유지됩니다.
+            </p>
+          </div>
+          <div class="settings-actions">
+            <span id="secretNote" class="save-note"></span>
+            <button id="saveSecretsBtn" class="btn btn-primary">키 저장</button>
+          </div>
+        </div>
+        <div id="secretGroups" class="secret-groups"></div>
+      </div>
+    </details>
+
+    <div class="card">
+      <h3>관심사</h3>
+      <p class="muted small">키워드는 구체적일수록 좋습니다. <code>AI</code> 같은 범용어는 자동으로 가중치가 낮아집니다.</p>
+      <div id="interests" class="interests"></div>
+      <div class="interest-add">
+        <button id="addInterest" type="button" class="btn">+ 관심사 추가</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>수집 소스</h3>
+      <p class="muted small">RSS/Atom 피드, JSON API, 크롤링 소스를 직접 추가할 수 있습니다. <strong>증인 전용</strong>은 뉴스레터에 실리지 않고 교차검증에만 쓰입니다.</p>
+      <div id="sources" class="sources"></div>
+      <div class="interest-add">
+        <button id="addSource" type="button" class="btn">+ 소스 추가</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────── 이력 -->
+  <section id="panel-history" class="panel">
+    <div class="col-head">
+      <h2>지난 실행</h2>
+      <button id="refreshHistory" class="btn btn-tiny">새로고침</button>
+    </div>
+    <div id="historyList" class="history"></div>
+    <p id="historyEmpty" class="empty">아직 기록이 없습니다.</p>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
