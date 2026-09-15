@@ -1,4 +1,4 @@
-# 뉴스레터 에이전트
+# 종우's 뉴스레터 에이전트
 
 LangGraph 기반 5단계 뉴스 파이프라인. **수집 → 선별 → 취재 → 검수 → 발행**.
 
@@ -28,7 +28,7 @@ python -m venv .venv
 
 - **실행** — 버튼 하나로 전 구간 실행. 단계별 진행과 로그가 실시간으로 보이고,
   결과는 신뢰도 배지가 달린 카드로 나온다. 발행 전에 멈춰 확인하는 모드도 있다.
-- **설정** — 관심사 키워드, 소스 on/off, 임계값, **API 키**, 발행 채널을 화면에서 바꾼다.
+- **설정** — 관심사 키워드, 소스 2분할 관리(본문 vs 증인), 임계값, **API 키**, 발행 채널, **자동 실행 스케줄러**를 화면에서 바꾼다.
   저장하면 `config/*.yaml`과 `.env`에 바로 반영되고 파일의 주석은 그대로 남는다.
 - **이력** — 지난 실행 기록을 열어본다.
 
@@ -37,14 +37,12 @@ python -m venv .venv
 ### 터미널로 쓰기
 
 ```bash
-.venv/Scripts/python.exe run.py --check
+.venv/Scripts/python.exe run.py --check       # 설정 무결성 검증
+.venv/Scripts/python.exe run.py               # 전 구간 1회 실행
+.venv/Scripts/python.exe run.py --schedule    # 지정 주기/시각 자동 실행 데몬
+.venv/Scripts/python.exe run.py --stage curate # 2단계까지만 (튜닝용, LLM 미사용)
 ```
 
-`--check`는 설정만 검증하고 끝난다. 문제가 없으면 그대로 돌린다.
-
-```bash
-.venv/Scripts/python.exe run.py
-```
 
 기본값은 `llm.provider=mock`, `publish.dry_run=true`라 **API 키도 웹후크도 없이** 전 구간이 돈다.
 결과는 콘솔과 `output/<run_id>.md`에 남는다.
@@ -151,15 +149,20 @@ confidence   = 0.55 × independence + 0.45 × agreement − (0.4 if 상충 else 
   base_url: "https://news.ycombinator.com/"
 ```
 
-#### `role` — 뉴스레터에 실을 소스 vs 검증에만 쓸 소스
+#### `role` — 본문 뉴스 소스 (`content`) vs 증인 전용 소스 (`corroboration`)
+
+GUI 설정 탭에서는 **📰 본문 뉴스 소스(좌측)** 와 **🛡️ 증인 전용 소스(우측)** 의 2분할 컬럼으로 직관적으로 분리되어 관리됩니다.
 
 ```yaml
-role: corroboration    # 기본값은 content
+role: corroboration    # content(본문 기사 후보) | corroboration(교차검증 증인 전용)
 ```
 
-구글뉴스 같은 **애그리게이터는 `corroboration`으로 둬야 한다.**
-링크가 암호화 리다이렉트라 원문 본문을 가져올 수 없어 요약이 제목 재탕이 된다.
-대신 한 사건을 다룬 매체를 폭넓게 끌어오므로 4단계 증인으로는 가장 값지다.
+- **본문 뉴스 소스 (`content`)**: 수집되어 선별·요약 과정을 거쳐 최종 뉴스레터 브리핑 후보가 되는 매체입니다. (예: IT 전문지, 종합 경제지, 공식 기술 블로그 등)
+- **증인 전용 소스 (`corroboration`)**: 구글뉴스나 포털 애그리게이터처럼 뉴스레터 본문에는 싣지 않고, **4단계에서 다른 매체의 기사를 뒷받침하는 증인(Fact Check)으로만 활약**합니다. 링크가 암호화 리다이렉트되어 본문을 직접 가져오지 못하는 소스도 증인으로는 가장 값집니다.
+- **선수와 심판의 분리 원칙 (검증 객관성 보장)**:
+  - 본문 기사와 증인 후보 간에 **동일 매체 배제**(`candidate.domain == target.domain`) 및 **통신사 전재(바이라인) 단일화**가 항상 강제됩니다.
+  - 연합뉴스가 본문 소스와 증인 소스 양쪽에 등록되어 있더라도, **연합뉴스 기사를 검증할 때 연합뉴스가 스스로의 증인이 되는 자가증명은 원천 차단**됩니다. 기사에 따라 '선수'로 뛰거나 '심판'으로만 뛰도록 철저히 격리되어 검증 신뢰도가 희석되지 않습니다.
+
 
 ### 관심사 조정
 
@@ -436,3 +439,32 @@ web/              GUI 프런트엔드 (index.html · style.css · app.js)
   같은 글을 두 번 올릴 수 있기 때문이다. `research`/`verify`는 노드 안에서 기사별 실패를
   이미 격리하므로, 노드째 재시도하면 이미 성공한 기사까지 LLM을 다시 부르게 된다.
 - **단독 보도가 `SINGLE_SOURCE`로 나오는 건 정상이다.** 낮은 등급이 곧 거짓이라는 뜻은 아니다.
+
+---
+
+## 제출물 및 파일위치
+
+과제 제출 및 평가에 필요한 핵심 6개 산출물의 프로젝트 내 파일 경로와 역할 명세입니다.
+
+| 번호 | 요구 항목 | 프로젝트 내 파일 위치 (경로) | 주요 역할 및 설명 |
+|:---:|---|---|---|
+| **1** | **LangGraph 에이전트 워크플로우 메인 로직** | [`src/newsagent/graph.py`](src/newsagent/graph.py)<br>↳ 노드별 상세 구현: [`src/newsagent/nodes/`](src/newsagent/nodes/) | • LangGraph의 `StateGraph`를 선언하고 5개 단계(`collect` → `curate` → `research` → `verify` → `publish`)를 엣지와 조건부 분기로 연결하는 파이프라인 조립 메인 로직<br>• `collect.py`, `curate.py`, `research.py`, `verify.py`, `publish.py`로 책임 분리 |
+| **2** | **파이프라인 실행 스크립트** | • CLI 엔트리포인트: [`run.py`](run.py)<br>• 로컬 Web GUI: [`app.py`](app.py)<br>• 실행 엔진: [`src/newsagent/runner.py`](src/newsagent/runner.py) | • `run.py`: 터미널 환경에서 전 구간 실행, 특정 단계 실행(`--stage`), 무결성 검증(`--check`), 자동 스케줄러 실행(`--schedule`) 수행<br>• `app.py`: `127.0.0.1` 로컬 브라우저 운영 콘솔을 제공하는 Flask 서버<br>• `runner.py`: CLI와 GUI가 공통 호출하는 단계별 순차 실행 엔진 |
+| **3** | **타깃 독자, 중요도 기준, 제외 조건 설정 파일** | • 관심사 및 제외어 설정: [`config/interests.yaml`](config/interests.yaml)<br>• 전체 파이프라인 기준: [`config/config.yaml`](config/config.yaml) | • `interests.yaml`: 타깃 독자의 관심 키워드(`keywords`), 가중치(`weight`), 하이브리드 선별 모드(`mode: hybrid`), 통과 기준 점수(`threshold: 0.40`), 제외 필터(`exclude: [주가 전망, 매수 추천]`) 정의<br>• `config.yaml`: 4단계 검수 임계값(`cluster_threshold`), 시효 상한(`peer_max_age_hours`), 발행 신뢰도 하한선(`min_confidence_to_publish`) 등 시스템 전반 기준 정의 |
+| **4** | **의존성 패키지 목록** | [`requirements.txt`](requirements.txt) | • `langgraph`, `openai`, `anthropic`, `google-genai`, `flask`, `beautifulsoup4`, `feedparser`, `scikit-learn` 등 파이프라인 구동에 필요한 모든 의존성 패키지 명세 |
+| **5** | **파이프라인 실행 및 검수 기록 데이터** | • 실행 결과 아카이브: [`output/`](output/)<br>• 상태 DB: [`state/`](state/) | • `output/<run_id>.json`: 원시 기사 데이터, 선별 점수, 원자적 팩트체크 판정, 신뢰도 수치 기록 (예: [`output/20260915_143832.json`](output/20260915_143832.json))<br>• `output/<run_id>.md`: 신뢰도 배지와 출처가 표기된 최종 뉴스레터 마크다운 결과물 (예: [`output/20260915_143832.md`](output/20260915_143832.md))<br>• `state/published.db`: 중복 발행 방지용 SQLite DB<br>• `state/checkpoints.db`: LangGraph 실행 상태 체크포인트 DB |
+| **6** | **프로젝트 수행 결과 보고서** | • 최종 종합 보고서: [`REPORT.md`](REPORT.md)<br>• 제품 요구사항 정의서: [`PRD.md`](PRD.md)<br>• 사용자 가이드: [`README.md`](README.md) | • `REPORT.md`: 분야/독자 정의, 소스 채택표, 선별 알고리즘, 파이프라인 구조도, 5대 화면 캡처 증명, 교차검증 실측 분석, 회고를 집대성한 최종 종합 보고서<br>• `PRD.md`: 실측 수치와 아키텍처 설계 결정을 기술한 제품 요구사항 문서<br>• `README.md`: 프로젝트 개요 및 빠른 시작 가이드 |
+
+---
+
+## 라이선스 (License)
+
+
+Copyright (c) 2026 cjwmanelf. All rights reserved.
+
+본 프로젝트의 모든 소스 코드와 관련 문서는 원저작자(`cjwmanelf`)의 독점적 저작물입니다.
+- **허용**: 원본 소스 코드의 비영리적·개인적 열람 및 연구 목적의 실행
+- **금지**: 원저작자의 사전 서면 승인 없는 **무단 수정, 편집, 2차적 저작물 작성, 수정된 버전의 Fork/재배포, 상업적 이용 일체 금지**
+
+자세한 법적 이용 약관 및 고지 사항은 [LICENSE](LICENSE) 파일을 참조하십시오.
+

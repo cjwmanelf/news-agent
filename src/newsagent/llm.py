@@ -198,11 +198,11 @@ class MockLLM(BaseLLM):
 
     def summarize(self, *, source: str, title: str, published_at: str, content: str) -> dict[str, Any]:
         self._track()
-        sentences = self._sentences(content, 6)
+        sentences = self._sentences(content, 10)
         return {
             "headline": clean_text(title)[:120],
             "summary": sentences[:3] or [clean_text(title)],
-            "key_facts": sentences[:4] or [clean_text(title)],
+            "key_facts": sentences[:8] or [clean_text(title)],
             "entities": {"org": [], "person": [], "product": []},
             "category": "기타",
             "why_it_matters": "(mock 백엔드 — 실제 LLM 으로 전환하면 채워집니다)",
@@ -218,7 +218,7 @@ class MockLLM(BaseLLM):
             tokens = [t for t in tokens if len(t) >= 2]
             hits = sum(1 for t in tokens if t and t in peer_text)
             ratio = hits / max(len(tokens), 1)
-            status = "supported" if ratio >= 0.4 else "unverified"
+            status = "supported" if ratio >= 0.25 else "unverified"
             checks.append(
                 {
                     "fact": fact,

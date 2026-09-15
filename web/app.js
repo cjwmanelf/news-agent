@@ -1,4 +1,4 @@
-/* 뉴스레터 에이전트 — 프런트엔드 */
+/* 종우's 뉴스레터 에이전트 — 프런트엔드 */
 
 const $ = (id) => document.getElementById(id);
 const api = async (path, opts) => {
@@ -19,6 +19,20 @@ const STAGE_LABELS = {
 const STAGE_ORDER = ["collect", "curate", "research", "verify", "publish"];
 const FACT_MARK = { supported: "✅", contradicted: "❌", unverified: "❔" };
 
+const VERDICT_LABEL = {
+  VERIFIED: "교차검증됨",
+  LIKELY: "사실로 추정",
+  SINGLE_SOURCE: "단일 출처",
+  DISPUTED: "내용 상충",
+};
+
+const VERDICT_DESC = {
+  VERIFIED: "독립 언론사 3곳 이상에서 같은 사실을 보도하여 교차검증된 기사",
+  LIKELY: "독립 출처 2곳 이상에서 보도되어 사실일 가능성이 높은 기사",
+  SINGLE_SOURCE: "단일 매체 단독 보도이거나 다른 매체 확인이 부족한 기사",
+  DISPUTED: "다른 매체 보도와 사실관계가 상충되거나 내용이 엇갈리는 기사",
+};
+
 let config = null;
 let currentStatus = "idle";
 
@@ -38,19 +52,105 @@ document.querySelectorAll(".tab").forEach((tab) => {
 
 function renderStepper(upto) {
   const limit = STAGE_ORDER.indexOf(upto || "publish");
-  $("stepper").innerHTML = STAGE_ORDER.map((s, i) => `
-    <li class="step${i > limit ? " skipped" : ""}" data-step="${s}">
-      <span class="step-num">${i + 1}</span><span>${STAGE_LABELS[s]}</span>
-    </li>`).join("");
+  $("stepper").innerHTML = STAGE_ORDER.map((s, i) => {
+    const isSkipped = i > limit;
+    return `
+    <li class="step${isSkipped ? " skipped" : ""}" data-step="${s}">
+      <div class="step-main">
+        <span class="step-num">${i + 1}</span>
+        <span class="step-label">${esc(STAGE_LABELS[s])}</span>
+      </div>
+      <span class="step-status">${isSkipped ? "제외" : "대기"}</span>
+    </li>`;
+  }).join("");
 }
 
 function markStep(stage, phase) {
   const el = document.querySelector(`.step[data-step="${stage}"]`);
   if (!el) return;
-  el.classList.remove("active", "done", "skipped");
-  if (phase === "start") el.classList.add("active");
-  else if (phase === "done") el.classList.add("done");
-  else if (phase === "skipped") el.classList.add("skipped");
+  const statusEl = el.querySelector(".step-status");
+  const numEl = el.querySelector(".step-num");
+  const stepIdx = STAGE_ORDER.indexOf(stage);
+
+  if (phase === "start") {
+    STAGE_ORDER.slice(0, stepIdx).forEach((prev) => {
+      const prevEl = document.querySelector(`.step[data-step="${prev}"]`);
+      if (prevEl && !prevEl.classList.contains("skipped")) {
+        prevEl.classList.remove("active");
+        prevEl.classList.add("done");
+        const pStatus = prevEl.querySelector(".step-status");
+        const pNum = prevEl.querySelector(".step-num");
+        if (pStatus) pStatus.textContent = "완료";
+        if (pNum) pNum.textContent = "✓";
+      }
+    });
+    el.classList.remove("done", "skipped");
+    el.classList.add("active");
+    if (statusEl) statusEl.textContent = "진행 중…";
+    if (numEl) numEl.textContent = stepIdx + 1;
+  } else if (phase === "done") {
+    el.classList.remove("active", "skipped");
+    el.classList.add("done");
+    if (statusEl) statusEl.textContent = "완료";
+    if (numEl) numEl.textContent = "✓";
+  } else if (phase === "skipped") {
+    el.classList.remove("active", "done");
+    el.classList.add("skipped");
+    if (statusEl) statusEl.textContent = "제외";
+    if (numEl) numEl.textContent = stepIdx + 1;
+  }
+}
+
+function updateStepperFromStats(stats, upto, isRunning, currentStage) {
+  const targetUpto = upto || "publish";
+  const limit = STAGE_ORDER.indexOf(targetUpto);
+  STAGE_ORDER.forEach((s, i) => {
+    const el = document.querySelector(`.step[data-step="${s}"]`);
+    if (!el) return;
+    const statusEl = el.querySelector(".step-status");
+    const numEl = el.querySelector(".step-num");
+    el.classList.remove("active", "done", "skipped");
+
+    if (i > limit) {
+      el.classList.add("skipped");
+      if (statusEl) statusEl.textContent = "제외";
+      if (numEl) numEl.textContent = i + 1;
+      return;
+    }
+
+    if (isRunning) {
+      if (s === currentStage) {
+        el.classList.add("active");
+        if (statusEl) statusEl.textContent = "진행 중…";
+        if (numEl) numEl.textContent = i + 1;
+      } else if (STAGE_ORDER.indexOf(s) < STAGE_ORDER.indexOf(currentStage)) {
+        el.classList.add("done");
+        if (statusEl) statusEl.textContent = "완료";
+        if (numEl) numEl.textContent = "✓";
+      } else {
+        if (statusEl) statusEl.textContent = "대기";
+        if (numEl) numEl.textContent = i + 1;
+      }
+      return;
+    }
+
+    const hasStat = stats && (
+      (s === "collect" && stats.collect) ||
+      (s === "curate" && stats.curate) ||
+      (s === "research" && stats.research) ||
+      (s === "verify" && stats.verify) ||
+      (s === "publish" && stats.publish)
+    );
+
+    if (hasStat || (!isRunning && stats && Object.keys(stats).length > 0 && i <= limit)) {
+      el.classList.add("done");
+      if (statusEl) statusEl.textContent = "완료";
+      if (numEl) numEl.textContent = "✓";
+    } else {
+      if (statusEl) statusEl.textContent = "대기";
+      if (numEl) numEl.textContent = i + 1;
+    }
+  });
 }
 
 /* ───────────────────────────────────────── 로그 */
@@ -155,6 +255,12 @@ async function refreshStatus() {
     updateSchedulePill(schedule);
     if (session.status === "awaiting_approval") {
       $("approvalCount").textContent = `${result.results.length}건을 보낼 준비가 됐습니다. 아래에서 확인하세요.`;
+      updateStepperFromStats(result.stats, "verify", false);
+      markStep("publish", "start");
+    } else if (session.status === "done") {
+      updateStepperFromStats(result.stats, session.stage || "publish", false);
+    } else if (session.status === "running" && session.stage) {
+      updateStepperFromStats(result.stats, session.stage, true, session.stage);
     }
   } catch (e) {
     console.error(e);
@@ -201,10 +307,13 @@ function renderCard(item) {
   const facts = item.fact_checks || [];
   const supported = facts.filter((f) => f.status === "supported").length;
   const contradicted = facts.filter((f) => f.status === "contradicted").length;
+  const label = VERDICT_LABEL[item.verdict] || item.verdict_label || item.verdict;
+  const desc = VERDICT_DESC[item.verdict] || item.verdict_desc || "";
 
   return `<article class="rcard v-${esc(item.verdict)}">
     <div class="rcard-top">
-      <span class="badge v-${esc(item.verdict)}">${esc(item.verdict_label)}</span>
+      <span class="badge v-${esc(item.verdict)}" title="${esc(desc)}">${esc(label)}</span>
+      ${desc ? `<span class="verdict-desc" title="${esc(desc)}">${esc(desc)}</span>` : ""}
       <span class="conf">
         <span class="conf-bar"><span class="conf-fill" style="width:${conf}%"></span></span>
         <span class="conf-num">${(item.confidence ?? 0).toFixed(2)}</span>
@@ -636,45 +745,100 @@ function syncSourceHeader(card) {
   card.querySelector(".s-role-tag").hidden = card.querySelector(".s-role").value !== "corroboration";
 }
 
-function renderSources(sources) {
-  $("sources").innerHTML = (sources || []).map((s) => sourceCard(s, false)).join("");
-  document.querySelectorAll(".source-card").forEach(syncSourceType);
+function updateSourceCounts() {
+  const contentCards = document.querySelectorAll("#sourcesContent .source-card");
+  const witnessCards = document.querySelectorAll("#sourcesWitness .source-card");
+  const contentActive = [...contentCards].filter((c) => c.querySelector(".s-enabled")?.checked).length;
+  const witnessActive = [...witnessCards].filter((c) => c.querySelector(".s-enabled")?.checked).length;
+
+  if ($("contentSourceCount")) {
+    $("contentSourceCount").textContent = `${contentActive}/${contentCards.length}개`;
+  }
+  if ($("witnessSourceCount")) {
+    $("witnessSourceCount").textContent = `${witnessActive}/${witnessCards.length}개`;
+  }
+  if ($("contentSourcesEmpty")) $("contentSourcesEmpty").hidden = contentCards.length > 0;
+  if ($("witnessSourcesEmpty")) $("witnessSourcesEmpty").hidden = witnessCards.length > 0;
 }
 
-$("addSource").addEventListener("click", () => {
-  $("sources").insertAdjacentHTML("beforeend", sourceCard({ type: "rss", enabled: true, max_items: 30 }, true));
-  const card = $("sources").lastElementChild;
+function renderSources(sources) {
+  const contentEl = $("sourcesContent");
+  const witnessEl = $("sourcesWitness");
+  if (!contentEl || !witnessEl) return;
+
+  const contentList = (sources || []).filter((s) => s.role !== "corroboration");
+  const witnessList = (sources || []).filter((s) => s.role === "corroboration");
+
+  contentEl.innerHTML = contentList.map((s) => sourceCard(s, false)).join("");
+  witnessEl.innerHTML = witnessList.map((s) => sourceCard(s, false)).join("");
+
+  document.querySelectorAll(".source-card").forEach(syncSourceType);
+  updateSourceCounts();
+}
+
+function addSourceToColumn(role = "content") {
+  const isWitness = role === "corroboration";
+  const container = isWitness ? $("sourcesWitness") : $("sourcesContent");
+  if (!container) return;
+
+  const newSource = {
+    type: "rss",
+    enabled: true,
+    role: isWitness ? "corroboration" : "content",
+    max_items: isWitness ? 60 : 30,
+  };
+
+  container.insertAdjacentHTML("beforeend", sourceCard(newSource, true));
+  const card = container.lastElementChild;
   syncSourceType(card);
+  updateSourceCounts();
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   card.querySelector(".s-name").focus();
-});
+}
 
-$("sources").addEventListener("click", (ev) => {
-  const card = ev.target.closest(".source-card");
-  if (!card) return;
-  if (ev.target.closest(".s-edit")) {
-    card.classList.toggle("is-open");
-    return;
-  }
-  if (ev.target.closest(".s-remove")) {
-    const name = card.querySelector(".s-name").value.trim();
-    if (!confirm(`소스 '${name || "(이름 없음)"}' 를 삭제할까요?\n저장을 눌러야 파일에 반영됩니다.`)) return;
-    card.remove();
-  }
-});
+$("addContentSource")?.addEventListener("click", () => addSourceToColumn("content"));
+$("addWitnessSource")?.addEventListener("click", () => addSourceToColumn("corroboration"));
 
-$("sources").addEventListener("change", (ev) => {
-  const card = ev.target.closest(".source-card");
-  if (!card) return;
-  if (ev.target.classList.contains("s-type")) syncSourceType(card);
-  syncSourceHeader(card);
-});
-$("sources").addEventListener("input", (ev) => {
-  const card = ev.target.closest(".source-card");
-  if (card && (ev.target.classList.contains("s-name") || ev.target.classList.contains("s-url"))) {
+const sourcesCols = $("sourcesColumns");
+if (sourcesCols) {
+  sourcesCols.addEventListener("click", (ev) => {
+    const card = ev.target.closest(".source-card");
+    if (!card) return;
+    if (ev.target.closest(".s-edit")) {
+      card.classList.toggle("is-open");
+      return;
+    }
+    if (ev.target.closest(".s-remove")) {
+      const name = card.querySelector(".s-name").value.trim();
+      if (!confirm(`소스 '${name || "(이름 없음)"}' 를 삭제할까요?\n저장을 눌러야 파일에 반영됩니다.`)) return;
+      card.remove();
+      updateSourceCounts();
+    }
+  });
+
+  sourcesCols.addEventListener("change", (ev) => {
+    const card = ev.target.closest(".source-card");
+    if (!card) return;
+    if (ev.target.classList.contains("s-type")) syncSourceType(card);
+    if (ev.target.classList.contains("s-enabled")) updateSourceCounts();
+    if (ev.target.classList.contains("s-role")) {
+      const newRole = ev.target.value;
+      const targetContainer = newRole === "corroboration" ? $("sourcesWitness") : $("sourcesContent");
+      if (targetContainer && card.parentElement !== targetContainer) {
+        targetContainer.appendChild(card);
+        updateSourceCounts();
+      }
+    }
     syncSourceHeader(card);
-  }
-});
+  });
+
+  sourcesCols.addEventListener("input", (ev) => {
+    const card = ev.target.closest(".source-card");
+    if (card && (ev.target.classList.contains("s-name") || ev.target.classList.contains("s-url"))) {
+      syncSourceHeader(card);
+    }
+  });
+}
 
 function collectSources() {
   return [...document.querySelectorAll(".source-card")].map((card) => {
@@ -985,7 +1149,7 @@ async function loadHistory() {
       <span class="hrow-flow">수집 ${r.collected} → 선별 ${r.selected} → 발행 ${r.published}</span>
       ${r.dry_run === false ? '<span class="tag">전송됨</span>' : '<span class="tag">연습</span>'}
       <span class="hrow-dist">${Object.entries(r.distribution || {})
-        .map(([v, n]) => `<span class="badge v-${esc(v)}">${esc(v)} ${n}</span>`).join("")}</span>
+        .map(([v, n]) => `<span class="badge v-${esc(v)}" title="${esc(VERDICT_DESC[v] || '')}">${esc(VERDICT_LABEL[v] || v)} ${n}</span>`).join("")}</span>
     </div>`).join("");
 }
 
@@ -999,7 +1163,8 @@ $("historyList").addEventListener("click", async (ev) => {
   const results = (data.verified || []).map((v) => ({
     headline: v.brief.headline,
     verdict: v.verdict,
-    verdict_label: v.verdict,
+    verdict_label: VERDICT_LABEL[v.verdict] || v.verdict,
+    verdict_desc: VERDICT_DESC[v.verdict] || "",
     confidence: v.confidence,
     sources: v.corroborating_sources || [],
     summary: v.brief.summary || [],
@@ -1010,6 +1175,7 @@ $("historyList").addEventListener("click", async (ev) => {
   }));
   document.querySelector('.tab[data-tab="run"]').click();
   renderResult({ stats: data.stats || {}, results, selected: [] });
+  updateStepperFromStats(data.stats || {}, "publish", false);
   logEl.innerHTML = "";
   appendLog({ kind: "event", time: "", message: `📂 ${data.run_id} 기록을 불러왔습니다.` });
 });

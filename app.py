@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""뉴스레터 에이전트 로컬 GUI 서버.
+"""종우's 뉴스레터 에이전트 로컬 GUI 서버.
 
   python app.py            # http://127.0.0.1:8765 에서 실행
 
@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from newsagent.config import ConfigError, load_config, validate_config  # noqa: E402
 from newsagent.graph import build_checkpointer, build_pipeline, initial_state  # noqa: E402
-from newsagent.models import VERDICT_LABEL  # noqa: E402
+from newsagent.models import VERDICT_DESC, VERDICT_LABEL  # noqa: E402
 from newsagent.publishers import CHANNEL_LABEL, CHANNELS, configured_targets, missing_env  # noqa: E402
 from newsagent.runner import STAGES, run_stages  # noqa: E402
 from newsagent.scheduler import NewsScheduler  # noqa: E402
@@ -189,6 +189,7 @@ def serialize_results(state: dict[str, Any]) -> list[dict[str, Any]]:
                 "headline": brief.headline,
                 "verdict": verified.verdict,
                 "verdict_label": VERDICT_LABEL.get(verified.verdict, verified.verdict),
+                "verdict_desc": VERDICT_DESC.get(verified.verdict, ""),
                 "confidence": verified.confidence,
                 "sources": verified.corroborating_sources,
                 "cluster_size": verified.cluster_size,
@@ -610,7 +611,12 @@ def _worker(options: dict[str, Any]) -> None:
             checkpointer = build_checkpointer(
                 cfg.get("runtime", {}).get("checkpoint_path", "state/checkpoints.db")
             ) if approve else None
-            pipeline = build_pipeline(cfg, checkpointer=checkpointer, approve_before_publish=approve)
+            pipeline = build_pipeline(
+                cfg,
+                checkpointer=checkpointer,
+                approve_before_publish=approve,
+                on_stage=lambda name, phase: announce("stage", stage=name, phase=phase),
+            )
             graph_config = {"configurable": {"thread_id": start["run_id"]}} if checkpointer else {}
             state = pipeline.graph.invoke(dict(start), graph_config)
             state.setdefault("stats", {})["llm"] = pipeline.llm.usage
@@ -895,7 +901,7 @@ def main() -> None:
 
     port = int(os.environ.get("NEWSAGENT_PORT", "8765"))
     url = f"http://127.0.0.1:{port}"
-    print(f"\n  뉴스레터 에이전트 GUI — {url}\n  종료하려면 Ctrl+C\n")
+    print(f"\n  종우's 뉴스레터 에이전트 GUI — {url}\n  종료하려면 Ctrl+C\n")
     if os.environ.get("NEWSAGENT_NO_BROWSER") != "1":
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     # 127.0.0.1 에만 바인딩한다. 이 앱은 로컬 파일과 .env 비밀값을 다룬다.

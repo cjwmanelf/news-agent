@@ -79,7 +79,7 @@ def make_research_node(cfg: dict[str, Any], llm: BaseLLM):
             article_id=article.id,
             headline=clean_text(payload.get("headline")) or article.title,
             summary=_coerce_list(payload.get("summary"))[:5],
-            key_facts=_coerce_list(payload.get("key_facts"))[:6],
+            key_facts=_coerce_list(payload.get("key_facts"))[:10],
             entities=entities if isinstance(entities, dict) else {},
             category=clean_text(payload.get("category")) or "기타",
             why_it_matters=clean_text(payload.get("why_it_matters")),

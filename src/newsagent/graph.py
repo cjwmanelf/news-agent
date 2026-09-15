@@ -72,6 +72,7 @@ def build_pipeline(
     *,
     checkpointer: Any = None,
     approve_before_publish: bool = False,
+    on_stage: Any = None,
 ) -> Pipeline:
     llm = get_llm(cfg)
 
@@ -83,6 +84,24 @@ def build_pipeline(
 
     graph = StateGraph(NewsletterState)
 
+    def wrap_node(name: str, fn: Any) -> Any:
+        if not on_stage:
+            return fn
+
+        def wrapped(state: NewsletterState) -> dict[str, Any]:
+            try:
+                on_stage(name, "start")
+            except Exception:
+                pass
+            res = fn(state)
+            try:
+                on_stage(name, "done")
+            except Exception:
+                pass
+            return res
+
+        return wrapped
+
     # 재시도 정책은 collect 에만 건다.
     #   collect  — 네트워크 실패가 실제로 잦고, 다시 돌려도 HTTP GET 뿐이라 안전하다.
     #   curate   — 순수 계산이라 재시도할 이유가 없다.
@@ -92,13 +111,13 @@ def build_pipeline(
     #              레이트리밋 재시도는 DiscordPublisher 안에서 멱등하게 처리한다.
     graph.add_node(
         "collect",
-        make_collect_node(cfg),
+        wrap_node("collect", make_collect_node(cfg)),
         retry_policy=RetryPolicy(max_attempts=2, initial_interval=2.0),
     )
-    graph.add_node("curate", make_curate_node(cfg, store))
-    graph.add_node("research", make_research_node(cfg, llm))
-    graph.add_node("verify", make_verify_node(cfg, llm, store))
-    graph.add_node("publish", make_publish_node(cfg, store))
+    graph.add_node("curate", wrap_node("curate", make_curate_node(cfg, store)))
+    graph.add_node("research", wrap_node("research", make_research_node(cfg, llm)))
+    graph.add_node("verify", wrap_node("verify", make_verify_node(cfg, llm, store)))
+    graph.add_node("publish", wrap_node("publish", make_publish_node(cfg, store)))
 
     graph.add_edge(START, "collect")
     graph.add_edge("collect", "curate")
@@ -124,9 +143,9 @@ def build_pipeline(
     )
 
 
-def build_graph(cfg: dict[str, Any]):
+def build_graph(cfg: dict[str, Any], *, on_stage: Any = None):
     """체크포인터 없이 그래프만 필요할 때 (테스트·임베드 용)."""
-    return build_pipeline(cfg).graph
+    return build_pipeline(cfg, on_stage=on_stage).graph
 
 
 def initial_state() -> NewsletterState:

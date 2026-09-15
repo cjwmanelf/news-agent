@@ -88,6 +88,13 @@ VERDICT_LABEL = {
     DISPUTED: "내용 상충",
 }
 
+VERDICT_DESC = {
+    VERIFIED: "독립 언론사 3곳 이상에서 같은 사실을 보도하여 교차검증된 기사",
+    LIKELY: "독립 출처 2곳 이상에서 보도되어 사실일 가능성이 높은 기사",
+    SINGLE_SOURCE: "단일 매체 단독 보도이거나 다른 매체 확인이 부족한 기사",
+    DISPUTED: "다른 매체 보도와 사실관계가 상충되거나 내용이 엇갈리는 기사",
+}
+
 VERDICT_COLOR = {
     VERIFIED: 0x2ECC71,  # 초록
     LIKELY: 0x3498DB,  # 파랑

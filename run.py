@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""뉴스레터 에이전트 엔트리포인트.
+"""종우's 뉴스레터 에이전트 엔트리포인트.
 
   python run.py                     # 설정대로 전 구간 실행
   python run.py --check             # 설정만 검증하고 종료
@@ -137,7 +137,7 @@ def run_until(cfg: dict, stage: str) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="LangGraph 뉴스레터 에이전트")
+    parser = argparse.ArgumentParser(description="종우's 뉴스레터 에이전트")
     parser.add_argument("--config", default="config", help="설정 디렉토리 (기본: config)")
     parser.add_argument("--check", action="store_true", help="설정 검증만 하고 종료")
     parser.add_argument("--send", action="store_true", help="dry_run 을 끄고 실제 발행")

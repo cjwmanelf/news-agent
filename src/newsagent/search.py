@@ -51,15 +51,109 @@ def _warn_once(key: str, message: str) -> None:
         log.warning(message)
 
 
-def build_query(title: str, *, max_words: int = 12) -> str:
+_NOISE_WORDS = {
+    "단독", "속보", "종합", "포토", "현장", "영상", "특징주", "출격", "뜬다",
+    "깜짝", "일축", "눈길", "화제", "대담", "이모저모", "맞손", "사기", "사기극",
+    "상보", "직격", "비상", "주목", "발표",
+}
+
+
+def build_query(title: str, *, max_words: int = 6) -> str:
     """제목을 검색 질의로 다듬는다.
 
-    말머리([단독], [AI & LAW])와 문장부호는 검색을 좁히기만 하고 도움이 되지 않는다.
+    말머리([단독], [AI & LAW]), 문장부호, 검색을 과도하게 좁히는 자극적 어휘를 정리하고
+    핵심 키워드 4~6개를 추출한다.
+    한 글자 한글 고유명사(예: 젠슨 황의 '황', '美', '韓')를 보존한다.
     """
     text = _BRACKET.sub(" ", title or "")
     text = _PUNCT.sub(" ", text)
-    words = [w for w in text.split() if len(w) > 1]
+    words = []
+    for w in text.split():
+        if len(w) == 1 and w.isascii():
+            continue
+        if w in _NOISE_WORDS:
+            continue
+        words.append(w)
     return " ".join(words[:max_words]).strip()
+
+
+VIP_PERSONS = {
+    "젠슨 황", "젠슨황", "트럼프", "도널드 트럼프", "머스크", "일론 머스크",
+    "알트먼", "샘 알트먼", "샘 올트먼", "최태원", "이재용", "나델라", "사티아 나델라",
+    "저커버그", "마크 저커버그", "팀 쿡", "손정의",
+}
+
+_MODEL_PATTERN = re.compile(
+    r"\b([A-Za-z]+[-_]?[0-9]+[A-Za-z]*|[0-9]+[A-Za-z]+|RTX\s*(?:Pro\s*)?[0-9]+|HBM[0-9]*[A-Za-z]*|CXL|PIM|HBF|NVLink)\b",
+    re.IGNORECASE,
+)
+
+
+def build_entity_query(
+    entities: dict | None = None,
+    keywords: list[str] | None = None,
+    *,
+    max_terms: int = 4,
+    headline: str | None = None,
+    title: str | None = None,
+) -> str:
+    """엔티티(제품/하드웨어, 주요 기관, 주요 인물) 및 키워드 기반 고정밀 검색 질의를 생성한다."""
+    entities = entities or {}
+    keywords = keywords or []
+    terms: list[str] = []
+
+    full_text = f"{headline or ''} {title or ''}"
+    models = _MODEL_PATTERN.findall(full_text)
+    products = entities.get("product", [])
+    orgs = entities.get("org", [])
+    persons = entities.get("person", [])
+
+    # 1. 제품 / 하드웨어 식별자 최우선 (테크 기사에서 가장 변별력 높음)
+    for prod in products + models:
+        clean_prod = prod.strip()
+        if clean_prod and clean_prod not in terms:
+            terms.append(clean_prod)
+
+    # 2. 주요 인물 중 대중적으로 널리 알려진 VIP 인물 우선
+    # entities 에 person 이 없더라도 headline/title 텍스트에서 직접 탐색
+    for vip in VIP_PERSONS:
+        if vip in full_text and vip not in terms:
+            terms.append(vip)
+
+    for p in persons:
+        if any(vip in p for vip in VIP_PERSONS):
+            if p not in terms:
+                terms.append(p)
+
+    # 3. 핵심 기업/조직 (언론사/매체명 노이즈 제외)
+    for o in orgs:
+        if any(bad in o for bad in ("Hardware", "News", "뉴스", "닷컴", "신문", "일보", "방송", "Press", "미디어")):
+            continue
+        if o and o not in terms:
+            terms.append(o)
+
+    # 4. 매칭된 핵심 키워드
+    for k in keywords:
+        if k and k not in terms:
+            terms.append(k)
+
+    # 5. 지나치게 포괄적인 키워드만 모여 일반 주가/동향 뉴스로 흐르는 것 방지
+    # (제목에서 핵심 사건/이벤트 단어 보강)
+    if len(terms) < max_terms:
+        event_words = [w for w in _PUNCT.sub(" ", full_text).split() if len(w) >= 2 and w not in _NOISE_WORDS and w not in terms]
+        for ew in event_words:
+            if any(marker in ew for marker in ("서밋", "인프라", "공개", "출시", "개발", "체결", "합의", "실적", "협력", "포럼")):
+                terms.append(ew)
+                if len(terms) >= max_terms:
+                    break
+
+    # 6. 기타 인물 (일반 인물 중 4자 이하)
+    if len(terms) < max_terms:
+        for p in persons:
+            if len(p) <= 4 and p not in terms:
+                terms.append(p)
+
+    return " ".join(terms[:max_terms]).strip()
 
 
 def naver_hub_credentials() -> tuple[str, str] | None:
@@ -133,11 +227,44 @@ def search_related(
     collect_cfg: dict,
     search_cfg: dict | None = None,
     max_items: int = 20,
+    headline: str | None = None,
+    entities: dict | None = None,
+    keywords: list[str] | None = None,
 ) -> list[Article]:
-    """제목으로 관련 기사를 검색한다. 실패는 빈 리스트(검증을 포기할 뿐 파이프라인은 계속)."""
+    """제목 및 엔티티/키워드를 종합해 관련 기사를 다각도로 검색한다.
+    
+    실패는 빈 리스트(검증을 포기할 뿐 파이프라인은 계속).
+    """
     search_cfg = search_cfg or {}
-    query = build_query(title)
-    if len(query) < 4:
+    queries: list[str] = []
+
+    # 1) 정제된 헤드라인 질의 (LLM이 정제한 가장 명확한 사건 요약문 최우선)
+    if headline:
+        q_head = build_query(headline, max_words=6)
+        if len(q_head) >= 3 and q_head not in queries:
+            queries.append(q_head)
+
+    # 2) 엔티티/제품/VIP 인물 고정밀 질의
+    q_entity = build_entity_query(entities, keywords, max_terms=4, headline=headline, title=title)
+    if len(q_entity) >= 3 and q_entity not in queries:
+        queries.append(q_entity)
+
+    # 3) 정제된 원제목 질의
+    q_title = build_query(title, max_words=6)
+    if len(q_title) >= 3 and q_title not in queries:
+        queries.append(q_title)
+
+    # 4) 부제/절 분리 질의 (예: "— RTX Pro 5500 delivers...")
+    for text in (headline, title):
+        if text and any(sep in text for sep in ("—", " - ", ": ", " | ")):
+            clauses = re.split(r"—|\s-\s|:\s|\s\|\s", text)
+            for clause in clauses:
+                q_clause = build_query(clause.strip(), max_words=5)
+                if len(q_clause) >= 4 and q_clause not in queries:
+                    queries.append(q_clause)
+                    break
+
+    if not queries:
         return []
 
     provider = search_cfg.get("provider", "auto")
@@ -162,12 +289,29 @@ def search_related(
         )
         provider = "naver_hub" if hub else "google_news"
 
-    try:
-        if provider == "naver_hub":
-            return _search_naver(query, collect_cfg, max_items, hub, hub=True)
-        if provider == "naver_legacy":
-            return _search_naver(query, collect_cfg, max_items, legacy, hub=False)
-        return _search_google_news(query, collect_cfg, max_items, search_cfg)
-    except Exception as exc:
-        log.warning("교차검증 검색 실패 [%s] (%s): %s", provider, query[:30], exc)
-        return []
+    results_pool: dict[str, Article] = {}
+    per_query_items = max(6, min(10, max_items // max(len(queries), 1) + 3))
+
+    for idx, q in enumerate(queries):
+        try:
+            if provider == "naver_hub":
+                batch = _search_naver(q, collect_cfg, per_query_items, hub, hub=True)
+            elif provider == "naver_legacy":
+                batch = _search_naver(q, collect_cfg, per_query_items, legacy, hub=False)
+            else:
+                batch = _search_google_news(q, collect_cfg, per_query_items, search_cfg)
+
+            for art in batch:
+                key = art.url or art.id
+                if key not in results_pool:
+                    results_pool[key] = art
+                if len(results_pool) >= max_items:
+                    break
+        except Exception as exc:
+            log.warning("교차검증 검색 실패 [%s] (%s): %s", provider, q[:30], exc)
+
+        # 최소 2개 이상의 쿼리를 시도한 후 max_items 달성 시 종료 (단일 쿼리 독점 방지)
+        if len(results_pool) >= max_items and idx >= 1:
+            break
+
+    return list(results_pool.values())[:max_items]

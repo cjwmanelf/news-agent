@@ -211,7 +211,14 @@ def make_verify_node(
     min_confidence = float(verify_cfg["min_confidence_to_publish"])
     workers = max(1, int(cfg["research"]["max_workers"]))
 
-    def gather_candidates(target: Article, corpus: list[Article]) -> tuple[list[Article], int]:
+    def gather_candidates(
+        target: Article,
+        corpus: list[Article],
+        *,
+        headline: str | None = None,
+        entities: dict | None = None,
+        keywords: list[str] | None = None,
+    ) -> tuple[list[Article], int]:
         """증인 후보 풀 = corpus + 사건별 검색 결과 (1단계)."""
         pool: dict[str, Article] = {a.id: a for a in corpus if a.id != target.id}
         found = 0
@@ -221,6 +228,9 @@ def make_verify_node(
                 collect_cfg=collect_cfg,
                 search_cfg=search_cfg,
                 max_items=int(search_cfg.get("max_results", 20)),
+                headline=headline,
+                entities=entities,
+                keywords=keywords,
             ):
                 if article.id == target.id or article.id in pool:
                     continue
@@ -270,7 +280,13 @@ def make_verify_node(
         peers: list[tuple[Article, float]] = []
 
         if article is not None:
-            candidates, metrics["searched"] = gather_candidates(article, corpus)
+            candidates, metrics["searched"] = gather_candidates(
+                article,
+                corpus,
+                headline=brief.headline,
+                entities=brief.entities,
+                keywords=getattr(article, "matched_keywords", []),
+            )
             ranked = rank_candidates(
                 article, candidates,
                 cluster_threshold=cluster_threshold,

@@ -1,0 +1,39 @@
+Copyright (c) 2026 cjwmanelf. All rights reserved.
+
+================================================================================
+[한국어] 이용 약관 및 저작권 고지
+================================================================================
+본 소프트웨어(종우's 뉴스레터 에이전트)의 모든 소스 코드 및 관련 문서에 대한
+저작권과 지식재산권은 원저작자(cjwmanelf)에게 있습니다.
+
+1. 허용 사항:
+   - 본 소프트웨어의 소스 코드를 원형 그대로 열람 및 학습하는 행위
+   - 개인적, 비상업적 연구 목적으로 원본 코드를 그대로 실행하는 행위
+
+2. 엄격히 금지되는 사항:
+   - 저작권자의 사전 서면 승인 없는 소스 코드의 무단 수정, 편집, 변형 (2차적 저작물 작성)
+   - 수정되거나 변형된 버전의 포크(Fork), 재배포, 공개 게시 또는 호스팅
+   - 본 소프트웨어 및 파생물의 상업적 판매, 유료 배포, 영리 목적의 서비스 운영
+   - 저작권 고지, 라이선스 문서, 저작자 정보의 임의 수정 또는 삭제
+
+본 조건을 위반하여 무단으로 코드를 수정하거나 배포할 경우, 대한민국 저작권법 및
+국제 저작권 조약에 따라 법적 조치(GitHub DMCA Takedown 요청, 게시 중단 및 손해배상 청구 등)가
+진행될 수 있습니다.
+
+================================================================================
+[English] Terms of Use and Proprietary License Notice
+================================================================================
+All rights reserved. The source code and accompanying documentation of this software
+are the proprietary and copyrighted property of cjwmanelf.
+
+1. Permitted Use:
+   - You may view and study the original, unmodified source code.
+   - You may execute the original, unmodified code solely for private, non-commercial research purposes.
+
+2. Prohibited Actions (Strictly Enforced):
+   - You may NOT modify, alter, adapt, translate, or create derivative works of this source code without prior written permission from the copyright holder.
+   - You may NOT redistribute, publish, mirror, or host any modified versions (including modified forks).
+   - You may NOT sell, license, sub-license, monetize, or use this software for any commercial purposes.
+   - You may NOT remove or alter any copyright notices or license files.
+
+Any unauthorized modification, distribution, or commercial exploitation constitutes copyright infringement and will be subject to immediate legal enforcement, including GitHub DMCA Takedown notices and applicable copyright laws.

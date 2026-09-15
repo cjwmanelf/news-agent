@@ -8,8 +8,8 @@
 # max_articles : 통과분 중 상위 N건만 3단계로 넘김
 
 mode: hybrid
-threshold: 0.21
-max_articles: 8
+threshold: 0.12
+max_articles: 5
 
 weights:
   keyword: 0.6
@@ -34,7 +34,7 @@ interests:
   - 주가 전망
   - 매수 추천
 - name: 엔비디아
-  weight: 1.2
+  weight: 1.3
   keywords:
   - DGX
   - RTX

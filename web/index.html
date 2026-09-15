@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>뉴스레터 에이전트</title>
+<title>종우's 뉴스레터 에이전트</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark">📰</span>
-    <h1>뉴스레터 에이전트</h1>
+    <h1>종우's 뉴스레터 에이전트</h1>
   </div>
   <div class="topbar-right">
     <span id="schedPill" class="pill pill-idle" title="자동 실행 상태">⏰ 스케줄 꺼짐</span>
@@ -302,12 +302,53 @@
       </div>
     </div>
 
-    <div class="card">
-      <h3>수집 소스</h3>
-      <p class="muted small">RSS/Atom 피드, JSON API, 크롤링 소스를 직접 추가할 수 있습니다. <strong>증인 전용</strong>은 뉴스레터에 실리지 않고 교차검증에만 쓰입니다.</p>
-      <div id="sources" class="sources"></div>
-      <div class="interest-add">
-        <button id="addSource" type="button" class="btn">+ 소스 추가</button>
+    <div class="card sources-card">
+      <div class="sources-head">
+        <div>
+          <h3>수집 소스</h3>
+          <p class="muted small">RSS/Atom 피드, JSON API, 크롤링 소스를 관리합니다. <strong>본문 소스</strong>는 뉴스레터 발행용이며, <strong>증인 전용</strong>은 팩트체크 교차검증에 쓰입니다.</p>
+        </div>
+      </div>
+
+      <div class="sources-tip">
+        <span class="sources-tip-icon">💡</span>
+        <div class="sources-tip-body">
+          <strong>선수와 심판의 분리 원칙:</strong>
+          본문 기사가 누구냐에 따라 동일 언론사(예: 연합뉴스)라도 <em>'선수(본문 기사)'</em>로 뛰거나 반대로 <em>'심판(독립 증인)'</em>으로만 뛰도록 시스템 내부에서 철저히 분리됩니다.
+          자사 도메인 기사 및 통신사 전재(바이라인) 기사는 증인 후보에서 자동으로 100% 제외되므로, 양쪽에 같은 매체가 등록되어 있어도 검증의 객관성은 조금도 희석되지 않습니다.
+        </div>
+      </div>
+
+      <div id="sourcesColumns" class="sources-columns">
+        <!-- 본문 소스 열 -->
+        <div class="sources-col">
+          <div class="sources-col-head">
+            <div class="sources-col-title">
+              <span class="sources-col-icon">📰</span>
+              <h4>본문 뉴스 소스</h4>
+              <span id="contentSourceCount" class="badge">0개</span>
+            </div>
+            <button id="addContentSource" type="button" class="btn btn-tiny">+ 본문 소스 추가</button>
+          </div>
+          <p class="sources-col-desc">수집 후 선별·요약되어 뉴스레터에 발행되는 주요 취재원입니다.</p>
+          <div id="sourcesContent" class="sources-list"></div>
+          <p id="contentSourcesEmpty" class="empty" hidden>등록된 본문 소스가 없습니다.</p>
+        </div>
+
+        <!-- 증인 전용 소스 열 -->
+        <div class="sources-col witness-col">
+          <div class="sources-col-head">
+            <div class="sources-col-title">
+              <span class="sources-col-icon">🛡️</span>
+              <h4>증인 전용 소스</h4>
+              <span id="witnessSourceCount" class="badge tag-witness">0개</span>
+            </div>
+            <button id="addWitnessSource" type="button" class="btn btn-tiny">+ 증인 소스 추가</button>
+          </div>
+          <p class="sources-col-desc">뉴스레터에 직접 실리지 않고, 사실 여부 교차검증에만 증인으로 쓰입니다.</p>
+          <div id="sourcesWitness" class="sources-list"></div>
+          <p id="witnessSourcesEmpty" class="empty" hidden>등록된 증인 소스가 없습니다.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -322,8 +363,18 @@
     <p id="historyEmpty" class="empty">아직 기록이 없습니다.</p>
   </section>
 
+  <!-- ─────────────────────────────────── 푸터 -->
+  <footer class="app-footer">
+    <div class="footer-inner">
+      <span class="footer-copy">Copyright (c) 2026 <strong>cjwmanelf</strong>. All rights reserved.</span>
+      <span class="footer-divider">·</span>
+      <span class="footer-sub">종우's 뉴스레터 에이전트 &mdash; AI 사실 검증 및 발행 파이프라인</span>
+    </div>
+  </footer>
+
 </main>
 
 <script src="app.js"></script>
 </body>
 </html>
+

@@ -18,7 +18,7 @@ sources:
   # ------------------------------------------------- 본문 소스 (content)
 - name: AI타임스
   type: rss
-  enabled: true
+  enabled: false
   url: "https://www.aitimes.com/rss/allArticle.xml"
   max_items: 40
 
@@ -56,11 +56,17 @@ sources:
   enabled: true
   url: "https://www.hankyung.com/feed/it"
   max_items: 30
+  role: content
 
+- name: 연합뉴스 경제/산업
+  type: rss
+  enabled: true
+  url: "https://www.yna.co.kr/rss/economy.xml"
+  max_items: 35
   role: content
 - name: TechCrunch
   type: rss
-  enabled: true
+  enabled: false
   url: "https://techcrunch.com/feed/"
   max_items: 30
 
@@ -84,22 +90,6 @@ sources:
   role: content
   max_items: 30
   lookback_hours: 72
-- name: 구글뉴스 - AI
-  type: rss
-  enabled: true
-  role: corroboration
-  url: "https://news.google.com/rss/search?q=AI+%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5&hl=ko&gl=KR&ceid=KR:ko"
-  max_items: 60
-
-- name: 구글뉴스 - 반도체
-  type: rss
-  enabled: true
-  role: corroboration
-  url: "https://news.google.com/rss/search?q=%EB%B0%98%EB%8F%84%EC%B2%B4&hl=ko&gl=KR&ceid=KR:ko"
-  max_items: 60
-
-  # ---------------------------------------------------------------- API
-  # 키 없이 쓰는 공개 JSON API 예시 (Hacker News / Algolia)
 - name: Hacker News (API)
   type: api
   enabled: true
@@ -171,3 +161,141 @@ sources:
     symbol: NVDA
     to: '{today}'
     token: ${FINNHUB_TOKEN}
+- name: 디지털데일리
+  type: rss
+  enabled: true
+  url: "https://www.ddaily.co.kr/rss/allArticle.xml"
+  max_items: 30
+  role: content
+
+- name: 바이라인네트워크
+  type: rss
+  enabled: true
+  url: "https://byline.network/feed/"
+  max_items: 25
+  role: content
+
+- name: 매일경제 IT
+  type: rss
+  enabled: true
+  url: "https://www.mk.co.kr/rss/30000001/"
+  max_items: 30
+  role: content
+
+- name: 테크M
+  type: rss
+  enabled: true
+  url: "https://www.techm.kr/rss/allArticle.xml"
+  max_items: 30
+  role: content
+
+  # ------------------------------------------------- 신규 추가: 글로벌 반도체·아키텍처 전문지
+- name: Next Platform
+  type: rss
+  enabled: true
+  url: "https://www.nextplatform.com/feed/"
+  max_items: 25
+  role: content
+
+- name: Tom's Hardware
+  type: rss
+  enabled: true
+  url: "https://www.tomshardware.com/feeds/all"
+  max_items: 30
+  role: content
+
+- name: SiliconANGLE
+  type: rss
+  enabled: true
+  url: "https://siliconangle.com/feed/"
+  max_items: 30
+  role: content
+
+  # ------------------------------------------------- 신규 추가: 빅테크 공식 인프라 블로그
+- name: AWS News Blog
+  type: rss
+  enabled: true
+  url: "https://aws.amazon.com/blogs/aws/feed/"
+  max_items: 20
+  role: content
+
+  # ------------------------------------------------- 신규 추가: 증인 전용 (corroboration) 확장
+- name: 구글뉴스 - AI
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=AI+%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 반도체
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%EB%B0%98%EB%8F%84%EC%B2%B4&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+  # ---------------------------------------------------------------- API
+  # 키 없이 쓰는 공개 JSON API 예시 (Hacker News / Algolia)
+- name: 구글뉴스 - HBM/메모리
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=HBM+%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90+SK%ED%95%98%EC%9D%B4%EB%8B%89%EC%8A%A4&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 엔비디아
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%EC%97%94%EB%B9%84%EB%94%94%EC%95%84+NVIDIA&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 빅테크/클라우드
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%EB%B9%85%ED%85%8C%ED%81%AC+OR+%ED%81%B4%EB%9D%BC%EC%9A%B0%EB%93%9C+OR+%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 로봇/자율주행
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%ED%9C%B4%EB%A8%B8%EB%85%B8%EC%9D%B4%EB%93%9C+OR+%EC%9E%90%EC%9C%A8%EC%A3%BC%ED%96%89+OR+%EB%A1%9C%EB%B4%87&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 스타트업/투자
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=%EC%8A%A4%ED%83%80%ED%8A%B8%EC%97%85+OR+%ED%88%AC%EC%9E%90%EC%9C%A0%EC%B9%98+OR+%EC%8B%9C%EB%A6%AC%EC%A6%88&hl=ko&gl=KR&ceid=KR:ko"
+  max_items: 60
+
+- name: 구글뉴스 - 글로벌 AI/반도체
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://news.google.com/rss/search?q=Artificial+Intelligence+OR+Semiconductor&hl=en-US&gl=US&ceid=US:en"
+  max_items: 60
+
+- name: 연합뉴스 - 종합 속보
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://www.yna.co.kr/rss/news.xml"
+  max_items: 50
+
+- name: 연합뉴스 - 경제/산업
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://www.yna.co.kr/rss/economy.xml"
+  max_items: 50
+
+- name: Yahoo Finance Tech
+  type: rss
+  enabled: true
+  role: corroboration
+  url: "https://finance.yahoo.com/news/rssindex"
+  max_items: 40
+
