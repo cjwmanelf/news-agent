@@ -11,45 +11,67 @@ LangGraph 기반 5단계 뉴스 파이프라인. **수집 → 선별 → 취재 
 
 ---
 
-## 빠른 시작
+## 빠른 시작 및 포크(Fork)·클론 사용 가이드
 
+> **💡 Zero-Config 테스트 지원:** 기본 설정이 `llm.provider=mock`, `publish.dry_run=true`로 되어 있어, **유료 API 키나 웹후크가 없어도 즉시 100% 정상 작동**합니다.
+
+### 1. 저장소 복제 및 가상환경 설치
 ```bash
+# 본인의 포크 저장소 클론
+git clone https://github.com/<your-username>/news-agent.git
+cd news-agent
+
+# 파이썬 가상환경 생성 (Python 3.10 이상 권장)
 python -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# 필수 패키지 설치
+# Windows PowerShell:
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Mac / Linux:
+source .venv/bin/activate && pip install -r requirements.txt
 ```
 
-### GUI로 쓰기 (권장)
-
+### 2. 무설정 즉시 테스트 (Zero-Config)
 ```bash
-.venv/Scripts/python.exe app.py
+# 단위/통합 테스트 70건 전수 검증
+.\.venv\Scripts\pytest
+
+# 웹 대시보드 실행 (가장 추천)
+.\.venv\Scripts\python.exe app.py
 ```
+브라우저에서 <http://127.0.0.1:8765> 접속 후 상단 **`[즉시 파이프라인 실행]`** 버튼을 누르면 뉴스 수집, 가짜 요약, 교차검증(구글 뉴스 무료 RSS), 가상 발행까지 전 구간이 에러 없이 즉시 동작합니다.
 
-브라우저가 열리면서 <http://127.0.0.1:8765> 에 콘솔이 뜬다. 여기서 전부 된다.
+### 3. 실제 서비스 운영 (실제 AI 요약 및 메신저 발행 설정)
+테스트를 넘어 실제 OpenAI/Claude 요약 및 Discord/Slack/Telegram 전송을 활성화하려면 아래 2가지 중 편한 방법을 선택하세요:
 
-- **실행** — 버튼 하나로 전 구간 실행. 단계별 진행과 로그가 실시간으로 보이고,
-  결과는 신뢰도 배지가 달린 카드로 나온다. 발행 전에 멈춰 확인하는 모드도 있다.
-- **설정** — 관심사 키워드, 소스 2분할 관리(본문 vs 증인), 임계값, **API 키**, 발행 채널, **자동 실행 스케줄러**를 화면에서 바꾼다.
-  저장하면 `config/*.yaml`과 `.env`에 바로 반영되고 파일의 주석은 그대로 남는다.
-- **이력** — 지난 실행 기록을 열어본다.
-
-서버는 `127.0.0.1`에만 바인딩된다. 로컬 파일과 `.env` 비밀값을 다루므로 외부에 노출하면 안 된다.
-
-### 터미널로 쓰기
-
-```bash
-.venv/Scripts/python.exe run.py --check       # 설정 무결성 검증
-.venv/Scripts/python.exe run.py               # 전 구간 1회 실행
-.venv/Scripts/python.exe run.py --schedule    # 지정 주기/시각 자동 실행 데몬
-.venv/Scripts/python.exe run.py --stage curate # 2단계까지만 (튜닝용, LLM 미사용)
-```
-
-
-기본값은 `llm.provider=mock`, `publish.dry_run=true`라 **API 키도 웹후크도 없이** 전 구간이 돈다.
-결과는 콘솔과 `output/<run_id>.md`에 남는다.
+- **방법 A (웹 UI 추천)**: `app.py` 실행 후 좌측 **`설정`** > **`API 키 · 웹후크`** 메뉴에서 보유한 키를 입력하고 저장합니다. (로컬 `.env`에 자동 안전 저장)
+- **방법 B (`.env` 수동 생성)**:
+  ```bash
+  cp .env.example .env
+  ```
+  생성된 `.env` 파일에 필요한 항목을 채웁니다:
+  - `LLM_PROVIDER=openai` 및 `OPENAI_API_KEY=sk-...` (또는 Anthropic/Gemini/로컬 Ollama)
+  - `DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...`
+  - `NAVER_API_KEY_ID`, `NAVER_API_KEY` (선택, 미입력 시 무료 구글 뉴스 RSS로 자동 대체)
 
 ---
 
-## 5단계
+### 실행 방법 요약
+
+| 용도 | 실행 명령어 | 설명 |
+| :--- | :--- | :--- |
+| **GUI 대시보드 (권장)** | `python app.py` | 웹 브라우저(<http://127.0.0.1:8765>)에서 실행, 기사 확인, 원클릭 발행, 설정 변경 |
+| **환경/설정 무결성 검증** | `python run.py --check` | 설정 파일 유효성, 키 설정 여부, 소스 연결 상태 사전 체크 |
+| **CLI 1회 전체 실행** | `python run.py` | 터미널에서 전체 1~5단계 파이프라인 즉시 수행 |
+| **자동 실행 데몬** | `python run.py --schedule` | 지정 주기/시각 자동 실행 데몬 |
+| **선별 단계까지만 실행** | `python run.py --stage curate` | 2단계까지만 (튜닝용, LLM 미사용) |
+
+서버는 `127.0.0.1`에만 바인딩됩니다. 로컬 파일과 `.env` 비밀값을 다루므로 외부에 노출하면 안 됩니다.
+
+---
+
+## 5단계 파이프라인 구조
 
 | 단계 | 하는 일 | LLM |
 |---|---|---|
