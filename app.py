@@ -30,7 +30,12 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from newsagent.config import ConfigError, load_config, validate_config  # noqa: E402
-from newsagent.graph import build_checkpointer, build_pipeline, initial_state  # noqa: E402
+from newsagent.graph import (  # noqa: E402
+    build_checkpointer,
+    build_pipeline,
+    close_checkpointer,
+    initial_state,
+)
 from newsagent.models import VERDICT_DESC, VERDICT_LABEL  # noqa: E402
 from newsagent.publishers import CHANNEL_LABEL, CHANNELS, configured_targets, missing_env  # noqa: E402
 from newsagent.runner import STAGES, run_stages  # noqa: E402
@@ -611,32 +616,46 @@ def _worker(options: dict[str, Any]) -> None:
             checkpointer = build_checkpointer(
                 cfg.get("runtime", {}).get("checkpoint_path", "state/checkpoints.db")
             ) if approve else None
-            pipeline = build_pipeline(
-                cfg,
-                checkpointer=checkpointer,
-                approve_before_publish=approve,
-                on_stage=lambda name, phase: announce("stage", stage=name, phase=phase),
-            )
-            graph_config = {"configurable": {"thread_id": start["run_id"]}} if checkpointer else {}
-            state = pipeline.graph.invoke(dict(start), graph_config)
-            state.setdefault("stats", {})["llm"] = pipeline.llm.usage
+            pipeline = None
+            handed_off = False  # 승인 대기로 세션에 넘겼는가
+            try:
+                pipeline = build_pipeline(
+                    cfg,
+                    checkpointer=checkpointer,
+                    approve_before_publish=approve,
+                    on_stage=lambda name, phase: announce("stage", stage=name, phase=phase),
+                )
+                graph_config = {"configurable": {"thread_id": start["run_id"]}} if checkpointer else {}
+                state = pipeline.graph.invoke(dict(start), graph_config)
+                state.setdefault("stats", {})["llm"] = pipeline.llm.usage
 
-            if approve and not state.get("publish_result"):
-                # publish 직전에서 멈췄다. 사용자가 확인 버튼을 누를 때까지 대기.
+                if approve and not state.get("publish_result"):
+                    # publish 직전에서 멈췄다. 사용자가 확인 버튼을 누를 때까지 대기.
+                    # 파이프라인 소유권이 세션으로 넘어가므로 여기서 닫으면 안 된다
+                    # (api_approve / api_discard 가 닫는다).
+                    with session.lock:
+                        session.state = state
+                        session.pipeline = pipeline
+                        session.graph_config = graph_config
+                        session.status = "awaiting_approval"
+                    handed_off = True
+                    announce("awaiting_approval", count=len(state.get("verified", [])))
+                    announce("finished")
+                    return
+
                 with session.lock:
                     session.state = state
-                    session.pipeline = pipeline
-                    session.graph_config = graph_config
-                    session.status = "awaiting_approval"
-                announce("awaiting_approval", count=len(state.get("verified", [])))
-                announce("finished")
-                return
-
-            pipeline.close()
-            with session.lock:
-                session.state = state
-                session.status = "done"
-                session.stage = "publish"
+                    session.status = "done"
+                    session.stage = "publish"
+            finally:
+                # 실행이 예외로 끝나도 반드시 닫는다. GUI 는 프로세스가 계속 떠
+                # 있어서, 여기서 놓치면 실패할 때마다 SQLite 커넥션이 쌓인다.
+                if not handed_off:
+                    if pipeline is not None:
+                        pipeline.close()
+                    else:
+                        # build_pipeline 이 실패해 Pipeline 이 안 만들어진 경우
+                        close_checkpointer(checkpointer)
     except Exception as exc:  # noqa: BLE001
         log.exception("실행 실패")
         with session.lock:
@@ -895,9 +914,17 @@ def main() -> None:
     try:
         cfg = load_config(str(CONFIG_DIR))
         scheduler.update_config(cfg.get("schedule", {}))
-        scheduler.start()
     except Exception as exc:  # noqa: BLE001
-        log.warning("스케줄러 초기화 실패 (비활성화 상태로 시작): %s", exc)
+        log.warning(
+            "설정을 읽지 못해 스케줄러를 비활성 상태로 시작합니다 "
+            "(설정 화면에서 고쳐 저장하면 그때 반영됩니다): %s", exc
+        )
+
+    # 루프는 설정 로딩 성공 여부와 무관하게 항상 띄운다. 여기서 같이 죽이면
+    # 나중에 설정 화면에서 스케줄을 켜도 (apply_patch 는 update_config 만 부르므로)
+    # 영원히 발동하지 않는다. 루프는 매 틱 enabled 를 확인하므로 꺼진 채 도는
+    # 비용은 5초마다 플래그 하나 보는 게 전부다.
+    scheduler.start()
 
     port = int(os.environ.get("NEWSAGENT_PORT", "8765"))
     url = f"http://127.0.0.1:{port}"

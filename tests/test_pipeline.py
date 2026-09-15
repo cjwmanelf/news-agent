@@ -723,6 +723,90 @@ class TestSecrets(unittest.TestCase):
         blob = json.dumps(described, ensure_ascii=False)
         self.assertNotIn("sk-abcdefghijklmnop", blob)
 
+    def test_special_characters_survive_dotenv(self):
+        """따옴표·역슬래시·공백이 든 값이 dotenv 로 그대로 되읽히는가.
+
+        escape 를 빠뜨리면 `KEY="ab"cd"` 같은 깨진 줄이 나오고 dotenv 가 그 줄을
+        통째로 버린다. GUI 에는 '저장됨' 으로 보이는데 파이프라인은 키 없이 도는,
+        가장 알아채기 어려운 실패라 여기서 못박아 둔다.
+        """
+        from dotenv import dotenv_values
+
+        tricky = {
+            "T_QUOTE": 'ab"cd ef',
+            "T_BACKSLASH": r"pa\th with space",
+            "T_BOTH": r'a"b\c d',
+            "T_HASH": "tok#en value",
+            "T_NEWLINE": "line1\nline2",
+            "T_SPACES": "  padded  ",
+            "T_APOSTROPHE": "it's fine",
+            "T_PLAIN": "https://discord.com/api/webhooks/1/abcDEF-_",
+        }
+        self.sec.update_env(dict(tricky), self.path)
+
+        parsed = dotenv_values(self.path)
+        mine = self.sec.read_env(self.path)
+        for name, value in tricky.items():
+            self.assertEqual(parsed.get(name), value, f"dotenv 가 {name} 를 되읽지 못함")
+            self.assertEqual(mine.get(name), value, f"read_env 가 {name} 를 되읽지 못함")
+
+        # 기존 주석과 우리가 모르는 항목은 그대로 남아야 한다
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("# 내 메모", text)
+        self.assertIn("MY_OWN_SETTING=keep-me", text)
+
+
+class TestPipelineCleanup(unittest.TestCase):
+    """Pipeline.close() 가 연 자원을 전부 닫는가.
+
+    GUI 는 프로세스를 띄워둔 채 실행마다 파이프라인을 새로 만든다.
+    하나라도 놓치면 실행 횟수만큼 SQLite 커넥션과 파일 핸들이 쌓인다.
+    """
+
+    def setUp(self):
+        import sqlite3
+        import tempfile
+
+        self.sqlite3 = sqlite3
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _alive(self, conn):
+        try:
+            conn.execute("SELECT 1")
+            return True
+        except self.sqlite3.ProgrammingError:
+            return False
+
+    def test_close_releases_store_and_checkpointer(self):
+        from newsagent.graph import Pipeline, build_checkpointer
+
+        saver = build_checkpointer(self.dir / "cp.db")
+        store = PublishedStore(self.dir / "pub.db")
+        pipeline = Pipeline(graph=None, llm=None, store=store, checkpointer=saver)
+
+        self.assertTrue(self._alive(store._conn))
+        self.assertTrue(self._alive(saver.conn))
+
+        pipeline.close()
+        self.assertIsNone(store._conn)
+        self.assertFalse(self._alive(saver.conn))
+
+        pipeline.close()  # 두 번 불러도 터지지 않아야 한다 (세션 정리 경로가 중복 호출한다)
+
+    def test_close_checkpointer_handles_orphan_and_none(self):
+        """build_pipeline 이 도중에 실패하면 Pipeline 없이 체크포인터만 남는다."""
+        from newsagent.graph import build_checkpointer, close_checkpointer
+
+        orphan = build_checkpointer(self.dir / "orphan.db")
+        close_checkpointer(orphan)
+        self.assertFalse(self._alive(orphan.conn))
+
+        close_checkpointer(None)  # 체크포인터를 안 쓰는 실행 경로
+
 
 class TestPublisherRegistry(unittest.TestCase):
     def setUp(self):

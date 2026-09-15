@@ -43,8 +43,16 @@ class Pipeline:
     interrupts_before_publish: bool = False
 
     def close(self) -> None:
+        """이 파이프라인이 연 자원을 전부 닫는다. 여러 번 불러도 안전하다.
+
+        GUI(app.py)는 한 프로세스가 계속 떠 있으면서 실행마다 파이프라인을 새로
+        만든다. 여기서 빠뜨리면 SQLite 커넥션과 파일 핸들이 실행 횟수만큼 쌓인다.
+        """
         if self.store is not None:
             self.store.close()
+            self.store = None
+        close_checkpointer(self.checkpointer)
+        self.checkpointer = None
 
 
 def has_selection(state: NewsletterState) -> str:
@@ -53,6 +61,22 @@ def has_selection(state: NewsletterState) -> str:
         return "research"
     log.warning("선별된 기사가 없어 파이프라인을 조기 종료합니다.")
     return "publish"
+
+
+def close_checkpointer(checkpointer: Any) -> None:
+    """체크포인터가 물고 있는 SQLite 커넥션을 닫는다.
+
+    SqliteSaver 에는 close() 가 없어 감싸고 있는 커넥션을 직접 닫아야 한다.
+    build_pipeline 이 도중에 실패해 Pipeline 객체가 만들어지지 않은 경우에도
+    호출할 수 있도록 모듈 함수로 뒀다.
+    """
+    connection = getattr(checkpointer, "conn", None)
+    if connection is None:
+        return
+    try:
+        connection.close()
+    except Exception:  # 이미 닫혔거나 다른 스레드가 쓰는 중
+        log.debug("체크포인터 커넥션을 닫지 못했습니다", exc_info=True)
 
 
 def build_checkpointer(path: str | Path):

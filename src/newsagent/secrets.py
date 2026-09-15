@@ -58,15 +58,62 @@ def validate_name(name: str) -> str:
     return name
 
 
+# 따옴표 안에서 해제되는 이스케이프 — python-dotenv 의 규칙을 그대로 따른다.
+#   큰따옴표: \\ \" \n \r \t 를 해제한다
+#   작은따옴표: 내용을 그대로 두되 \' 만 해제한다
+_ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "r": "\r", "t": "\t"}
+
+# 따옴표로 감싸지 않으면 dotenv 가 값을 잘라먹거나 줄 자체가 깨지는 문자들.
+# 역슬래시가 포함된 이유: 따옴표 안에서는 이스케이프 문자로 해석되므로
+# 원문 그대로 남기려면 우리가 먼저 escape 해줘야 한다.
+_UNSAFE_CHARS = " \t#\"'\n\r\\"
+
+
 def _unquote(value: str) -> str:
+    """`.env` 한 줄의 값 부분을 실제 값으로 되돌린다 (dotenv 와 같은 규칙)."""
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
+    if len(value) < 2 or value[0] != value[-1] or value[0] not in "\"'":
+        return value
+
+    quote, body = value[0], value[1:-1]
+    if quote == "'":
+        return body.replace("\\'", "'")
+
+    out: list[str] = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char == "\\" and index + 1 < len(body):
+            nxt = body[index + 1]
+            out.append(_ESCAPES.get(nxt, "\\" + nxt))
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
 
 
 def _needs_quotes(value: str) -> bool:
-    return bool(value) and (value != value.strip() or any(c in value for c in " #\"'\n"))
+    return bool(value) and (value != value.strip() or any(c in value for c in _UNSAFE_CHARS))
+
+
+def format_line(name: str, value: str) -> str:
+    """`.env` 에 쓸 한 줄을 만든다.
+
+    따옴표로 감쌀 때는 값 안의 역슬래시·큰따옴표·줄바꿈을 반드시 escape 한다.
+    빠뜨리면 값에 " 가 하나만 있어도 `KEY="ab"cd"` 같은 깨진 줄이 나오고
+    dotenv 는 그 줄을 통째로 버린다. 그러면 GUI 에는 '저장됨' 으로 보이는데
+    정작 파이프라인은 키가 없는 상태로 도는, 가장 알아채기 어려운 실패가 된다.
+    """
+    if not _needs_quotes(value):
+        return f"{name}={value}"
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+    return f'{name}="{escaped}"'
 
 
 def read_env(path: str | Path = ".env") -> dict[str, str]:
@@ -150,7 +197,7 @@ def update_env(updates: dict[str, str | None], path: str | Path = ".env") -> lis
         if value is None:
             result.append(f"{name}=")
         else:
-            result.append(f"{name}={value}" if not _needs_quotes(value) else f'{name}="{value}"')
+            result.append(format_line(name, value))
         changed.append(name)
 
     # 파일에 없던 항목은 끝에 덧붙인다
@@ -160,7 +207,7 @@ def update_env(updates: dict[str, str | None], path: str | Path = ".env") -> lis
             result.append("")
         result.append("# GUI 에서 추가됨")
         for name, value in appended:
-            result.append(f"{name}={value}" if not _needs_quotes(value) else f'{name}="{value}"')
+            result.append(format_line(name, value))
             changed.append(name)
 
     file.write_text("\n".join(result).rstrip() + "\n", encoding="utf-8")
